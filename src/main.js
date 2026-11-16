@@ -75,6 +75,7 @@ const M = {
     err_no_raise: 'Esa máquina no deja traer ventanas al frente desde aquí: la ves, pero puede estar tapada por otra.',
     err_window_gone: 'Esa ventana ya no está abierta.',
     err_no_video: 'Esa máquina no puede enviar la imagen de esta ventana (le falta ffmpeg, o usa Wayland).',
+    err_old_agent: 'Esa máquina tiene una versión anterior del escritorio remoto: actualízala para ver la imagen de las ventanas y traerlas al frente.',
     video_wait: 'La imagen de esta ventana solo viaja por conexión directa entre tus aparatos. Esperando a que se abra…',
     error: 'Error: '
   },
@@ -117,6 +118,7 @@ const M = {
     err_no_raise: 'That machine does not let windows be brought to the front from here: you see it, but another may cover it.',
     err_window_gone: 'That window is no longer open.',
     err_no_video: 'That machine cannot send the picture of this window (it lacks ffmpeg, or uses Wayland).',
+    err_old_agent: 'That machine runs an older version of the remote desktop: update it to see the picture of windows and bring them to the front.',
     video_wait: 'The picture of this window only travels over a direct connection between your devices. Waiting for it to open…',
     error: 'Error: '
   }
@@ -161,6 +163,9 @@ function errorText (err) {
   if (e?.code === 'no-a11y-bus') return t('err_no_a11y')
   if (e?.code === 'no-raise') return t('err_no_raise')
   if (e?.code === 'no-video') return t('err_no_video')
+  // Un agente de antes no conoce lo nuevo (el vídeo, traer al frente): §14, la incompatibilidad
+  // se dice con palabras, no como el error crudo del agente.
+  if (e?.code === 'unknown-type') return t('err_old_agent')
   if (e?.code === 'window-not-found') return t('err_window_gone')
   return t('error') + (e?.message || String(e))
 }
