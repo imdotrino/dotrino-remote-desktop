@@ -330,6 +330,13 @@ function desktopScreen (link, sub, name = '') {
     const key = JSON.stringify([r, id])
     if (key !== lastLook) { lastLook = key; view.look(r, r ? id : null) }
     chooseVideo(r ? id : null)
+    syncTiles(r ? id : null)
+  }
+  /** Las imágenes guardadas de los huecos, en su sitio; con una ventana a la vista, solo las suyas. @param {number | null} only */
+  const syncTiles = (only) => {
+    videoLayer.sync(
+      (id) => rectOf(id),
+      (id) => only == null || view.ownerOf(id) === only)
   }
 
   // ---------- el vídeo de los huecos (agent/video.js, src/video.js) ----------
@@ -355,7 +362,8 @@ function desktopScreen (link, sub, name = '') {
     }
     if (want === videoId) return
     videoId = want
-    videoLayer.clear()
+    // La imagen que ya llegó de un hueco se queda (congelada) al dejar de mirarlo.
+    videoLayer.stopLive()
     if (!demo) send({ type: 'video', id: want })
   }
 
@@ -518,7 +526,7 @@ function desktopScreen (link, sub, name = '') {
           return
         }
         if (p.type === 'vframe') { if (p.id === videoId) { status.textContent = ''; videoLayer.frame(p) } return }
-        if (p.type === 'vwait') { if (p.id === videoId) { videoLayer.clear(); status.textContent = t('video_wait') } return }
+        if (p.type === 'vwait') { if (p.id === videoId) { videoLayer.stopLive(); status.textContent = t('video_wait') } return }
         if (p.type === 'fail') status.textContent = errorText(p)
       })
       rc.on('error', (/** @type {unknown} */ e) => { status.textContent = errorText(e) })
