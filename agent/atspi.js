@@ -324,8 +324,19 @@ export function makeReader (bus) {
     throw Object.assign(new Error('nothing to type'), { code: 'bad-key' })
   }
 
+  /**
+   * El proceso de la app a la que pertenece un nodo: el bus lo sabe por su nombre en el bus.
+   * @param {number} id
+   */
+  async function pidOf (id) {
+    const ref = refs.get(id)
+    if (!ref) throw Object.assign(new Error(`unknown node ${id}`), { code: 'no-node' })
+    const [pid] = await bus.call({ destination: 'org.freedesktop.DBus', path: '/org/freedesktop/DBus', iface: 'org.freedesktop.DBus', member: 'GetConnectionUnixProcessID', signature: 's', body: [ref[0]] })
+    return Number(pid)
+  }
+
   /** El objeto de un id, para quien lo necesite (las pruebas). @param {number} id */
   const refOf = (id) => refs.get(id) || null
 
-  return { apps, windows, walkWindow, doAction, focus, mouse, key, refOf, idOf }
+  return { apps, windows, walkWindow, doAction, focus, mouse, key, refOf, idOf, pidOf }
 }

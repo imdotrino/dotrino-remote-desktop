@@ -50,7 +50,7 @@ hueco con su nombre.
 
 | Sentido | Payload |
 |---|---|
-| cliente → máquina | `scene` · `leave` · `click {x,y,button?,double?}` · `press`/`release {x,y,button?}` · `move {x,y}` · `wheel {x,y,dy}` · `action {id,index?}` · `focus {id}` · `text {text}` · `key {keysym}` |
+| cliente → máquina | `scene` · `leave` · `raise {id}` (traer la ventana al frente; X11 con `xdotool`) · `click {x,y,button?,double?}` · `press`/`release {x,y,button?}` · `move {x,y}` · `wheel {x,y,dy}` · `action {id,index?}` · `focus {id}` · `text {text}` · `key {keysym}` |
 | máquina → cliente | `scene {seq,screen,wins,nodes}` · `patch {seq,base,put,del,order?,screen?,wins?}` · `fail {code,message}` |
 
 Un nodo: `{id, p (padre), r (rol), n (nombre), t (texto), x, y, w, h, s (estados en letras), a (acciones), hole?}`.

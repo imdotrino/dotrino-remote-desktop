@@ -121,6 +121,15 @@ export function makeView (svg, words) {
   svg.replaceChildren(layer)
   /** @type {{ x: number, y: number, w: number, h: number } | null} lo que se está mirando */
   let focus = null
+  /** @type {number | null} la única ventana que se dibuja (null = todas) */
+  let only = null
+  /** @type {Map<number, number>} nodo → la ventana a la que pertenece */
+  let owner = new Map()
+  /** Enseña solo los nodos de `only` (o todos). Con todas dibujadas, lo que está delante de la
+   *  ventana elegida le pintaba encima sus botones (dueño, 2026-11-16). */
+  const applyOnly = () => {
+    for (const [id, e] of els) e.g.style.display = only == null || owner.get(id) === only ? '' : 'none'
+  }
   let screen = { w: 1, h: 1 }
 
   const viewBox = () => {
@@ -137,6 +146,15 @@ export function makeView (svg, words) {
    */
   function show (scene, changed = null, reordered = true) {
     screen = scene.screen
+    // De qué ventana es cada nodo: se sube por los padres hasta una de la lista de ventanas.
+    const wins = new Set(scene.wins.map((w) => w.id))
+    const parent = new Map(scene.nodes.map((n) => [n.id, n.p]))
+    owner = new Map()
+    for (const n of scene.nodes) {
+      let id = n.id; let hops = 0
+      while (!wins.has(id) && parent.has(id) && hops++ < 80) id = /** @type {number} */ (parent.get(id))
+      owner.set(n.id, wins.has(id) ? id : -1)
+    }
     const alive = new Set(scene.nodes.map((n) => n.id))
     for (const [id, e] of els) if (!alive.has(id)) { e.g.remove(); els.delete(id) }
     for (const n of scene.nodes) {
@@ -149,14 +167,16 @@ export function makeView (svg, words) {
     // Orden de pintado: el de la escena. `append` mueve sin recrear.
     if (reordered || !changed) for (const n of scene.nodes) layer.appendChild(/** @type {{ g: SVGGElement }} */ (els.get(n.id)).g)
     else for (const n of scene.nodes) { const e = els.get(n.id); if (e && !e.g.parentNode) layer.appendChild(e.g) }
+    applyOnly()
     viewBox()
   }
 
   /**
    * Mirar solo una parte del escritorio (una ventana) o, con `null`, todo.
    * @param {{ x: number, y: number, w: number, h: number } | null} rect
+   * @param {number | null} [win]  dibujar solo esa ventana (null = todas)
    */
-  function look (rect) { focus = rect; viewBox() }
+  function look (rect, win = null) { focus = rect; only = win; applyOnly(); viewBox() }
 
   /**
    * De un punto del navegador al punto de la pantalla de la máquina.

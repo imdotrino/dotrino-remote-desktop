@@ -71,6 +71,8 @@ const M = {
     err_blocked: 'Un aprobador bloqueó este aparato; se desbloquea en la bóveda.',
     err_no_desktop: 'Esa máquina no tiene una sesión de escritorio abierta.',
     err_no_a11y: 'Esa máquina no tiene el servicio de accesibilidad del escritorio (at-spi2-core).',
+    err_no_raise: 'Esa máquina no deja traer ventanas al frente desde aquí: la ves, pero puede estar tapada por otra.',
+    err_window_gone: 'Esa ventana ya no está abierta.',
     error: 'Error: '
   },
   en: {
@@ -109,6 +111,8 @@ const M = {
     err_blocked: 'An approver blocked this device; unblock it in the vault.',
     err_no_desktop: 'That machine has no desktop session open.',
     err_no_a11y: 'That machine has no desktop accessibility service (at-spi2-core).',
+    err_no_raise: 'That machine does not let windows be brought to the front from here: you see it, but another may cover it.',
+    err_window_gone: 'That window is no longer open.',
     error: 'Error: '
   }
 }
@@ -150,6 +154,8 @@ function errorText (err) {
   if (e?.code === 'blocked') return t('err_blocked')
   if (e?.code === 'no-session-bus') return t('err_no_desktop')
   if (e?.code === 'no-a11y-bus') return t('err_no_a11y')
+  if (e?.code === 'no-raise') return t('err_no_raise')
+  if (e?.code === 'window-not-found') return t('err_window_gone')
   return t('error') + (e?.message || String(e))
 }
 
@@ -300,17 +306,18 @@ function desktopScreen (link, sub, name = '') {
     const n = scene && id != null ? scene.nodes.find((x) => x.id === id) : null
     return n ? { x: n.x, y: n.y, w: n.w, h: n.h } : null
   }
-  /** La ventana que se mira ahora (o null = todo). */
-  const target = () => {
+  /** La ventana que se mira ahora (o null = todo el escritorio). */
+  const targetId = () => {
     if (!scene || watch === 'all') return null
-    if (watch === 'active') return rectOf(scene.wins.find((w) => w.active)?.id)
-    return rectOf(watch)
+    if (watch === 'active') return scene.wins.find((w) => w.active)?.id ?? null
+    return watch
   }
   let lastLook = ''
   const follow = () => {
-    const r = target()
-    const key = JSON.stringify(r)
-    if (key !== lastLook) { lastLook = key; view.look(r) }
+    const id = targetId()
+    const r = rectOf(id ?? undefined)
+    const key = JSON.stringify([r, id])
+    if (key !== lastLook) { lastLook = key; view.look(r, r ? id : null) }
   }
 
   /**
@@ -322,6 +329,8 @@ function desktopScreen (link, sub, name = '') {
     const v = picker.value
     watch = v === 'active' || v === 'all' ? v : Number(v)
     follow()
+    // Elegir una ventana es querer trabajar en ella: se trae al frente, con el foco, en la máquina.
+    if (typeof watch === 'number') send({ type: 'raise', id: watch })
   })
   function showWins () {
     if (!scene) return

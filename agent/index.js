@@ -23,6 +23,7 @@
  *     { type:'focus', id }                poner el foco en un nodo
  *     { type:'text', text }               escribir un texto
  *     { type:'key', keysym }              una tecla especial, por su keysym de X (Intro, flechas…)
+ *     { type:'raise', id }                traer al frente esa ventana (id de su nodo), con el foco
  *   agente → cliente:
  *     { type:'scene', seq, screen, wins, nodes } · { type:'patch', seq, base, … } (scene.js)
  *     { type:'fail', code, message }
@@ -35,6 +36,7 @@ import { createRequire } from 'node:module'
 import { startRemoteAgent } from '@dotrino/remote-agent/agent'
 import { dataDir, loadLink, LABEL } from './link.js'
 import { makeDesktop } from './desktop.js'
+import { raiseWindow } from './raise.js'
 
 /** @typedef {Awaited<ReturnType<typeof startRemoteAgent>>} RemoteAgent */
 
@@ -141,6 +143,13 @@ export function serveSession (session, desktop, { log = () => {} } = {}) {
           if (text.length > MAX_TYPED) return fail('too-long', `at most ${MAX_TYPED} characters at a time`)
           await reader().key({ text })
           return
+        case 'raise': {
+          if (!int(id)) return fail('bad-input', 'raise needs a window id')
+          const win = desktop.scene.wins.find((w) => w.id === id)
+          if (!win) return fail('window-not-found', `no window ${id} in the scene`)
+          await raiseWindow({ pid: await reader().pidOf(id), title: win.name })
+          return
+        }
         case 'key':
           if (!int(keysym) || keysym <= 0) return fail('bad-input', 'key needs a keysym')
           await reader().key({ keysym })

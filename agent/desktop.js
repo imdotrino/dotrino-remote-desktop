@@ -15,6 +15,7 @@
  */
 import { makeReader, openA11yBus, setA11y, restoreA11y } from './atspi.js'
 import { diff, screenOf } from './scene.js'
+import { activeWindow } from './raise.js'
 
 export const SETTLE_MS = 120
 export const WINDOWS_MS = 1000
@@ -43,6 +44,8 @@ export function makeDesktop (opts = {}) {
   const perWin = new Map()
   /** @type {Set<(p: Patch) => void>} */
   const watchers = new Set()
+  /** @type {Map<string, number>} el proceso de cada app, por su nombre en el bus */
+  const pids = new Map()
   /** @type {Set<string>} apps (su nombre en el bus) con algo nuevo */
   const dirtyApps = new Set()
   let fullDue = true
@@ -106,6 +109,17 @@ export function makeDesktop (opts = {}) {
   async function refresh () {
     if (!reader) return
     const wins = await reader.windows()
+    // Cuál está activa lo dice el gestor de ventanas si se le puede preguntar: la accesibilidad
+    // la informa mal (una app de Electron se queda «activa» para siempre).
+    const real = await activeWindow()
+    if (real) {
+      for (const w of wins) {
+        let pid = pids.get(w.ref[0])
+        if (pid == null) { try { pid = await reader.pidOf(w.id) } catch (_) { pid = -1 } pids.set(w.ref[0], pid) }
+        w.active = pid === real.pid && w.name === real.title
+      }
+      wins.sort((a, b) => Number(a.active) - Number(b.active))
+    }
     const full = fullDue
     fullDue = false
     const dirty = new Set(dirtyApps)
