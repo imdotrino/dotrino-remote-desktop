@@ -58,6 +58,10 @@ const M = {
     connecting: (n) => `Conectando con ${n}…`,
     conn_fail: (n) => `No se pudo conectar con ${n}.`,
     all_screen: 'Todo',
+    active_win: 'Activa',
+    zoom_in: 'Acercar',
+    zoom_out: 'Alejar',
+    hscroll: 'Desplazar a los lados',
     keyboard: 'Teclado',
     no_view: 'sin vista',
     disconnect: 'Desconectar',
@@ -91,6 +95,10 @@ const M = {
     connecting: (n) => `Connecting to ${n}…`,
     conn_fail: (n) => `Could not connect to ${n}.`,
     all_screen: 'All',
+    active_win: 'Active',
+    zoom_in: 'Zoom in',
+    zoom_out: 'Zoom out',
+    hscroll: 'Scroll sideways',
     keyboard: 'Keyboard',
     no_view: 'no view',
     disconnect: 'Disconnect',
@@ -256,11 +264,13 @@ function desktopScreen (link, sub, name = '') {
   const node = el(`<section class="desktop" data-testid="desktop">
     <div class="dbar">
       <div class="wins" data-testid="wins"></div>
+      <span class="zoom"><button class="btn" data-testid="zoom-out" aria-label="${t('zoom_out')}">−</button><span data-testid="zoom-level">1×</span><button class="btn" data-testid="zoom-in" aria-label="${t('zoom_in')}">+</button></span>
       <button class="btn" data-testid="keyboard">${t('keyboard')}</button>
       ${demo ? '' : `<button class="btn" data-testid="disconnect">${t('disconnect')}</button>`}
     </div>
     <p class="status" data-testid="desktop-status">${demo ? t('demo_note') : t('connecting', esc(name))}</p>
     <div class="stage"><svg class="screen" data-testid="screen" preserveAspectRatio="xMidYMin meet"></svg></div>
+    <input class="hscroll" type="range" min="0" max="1000" value="0" data-testid="hscroll" aria-label="${t('hscroll')}" hidden>
     <textarea class="keys" data-testid="keys" autocapitalize="off" autocomplete="off" spellcheck="false" aria-label="${t('keyboard')}"></textarea>
   </section>`)
   const svg = /** @type {SVGSVGElement} */ ($(node, 'svg'))
@@ -274,32 +284,76 @@ function desktopScreen (link, sub, name = '') {
   /** @param {object} msg */
   const send = (msg) => { if (rc) rc.send(msg).catch((/** @type {unknown} */ e) => { status.textContent = errorText(e) }) }
 
-  /** La barra con las ventanas: tocar una la amplía; «Todo», el escritorio entero. */
+  /**
+   * QUÉ SE MIRA: la ventana activa (por defecto), todo el escritorio, o una ventana elegida.
+   * Se guarda la ventana y no su rectángulo: si se mueve o cambia de tamaño, la vista la sigue.
+   * Con dos monitores el escritorio mide 3840 px; encajado entero en una tableta, todo salía
+   * diminuto (dueño, 2026-11-16). Por eso se empieza por la ventana activa.
+   * @type {'active' | 'all' | number}
+   */
+  let watch = 'active'
+
+  /** El rectángulo de una ventana de la escena, o null si ya no está. @param {number | undefined} id */
+  const rectOf = (id) => {
+    const n = scene && id != null ? scene.nodes.find((x) => x.id === id) : null
+    return n ? { x: n.x, y: n.y, w: n.w, h: n.h } : null
+  }
+  /** La ventana que se mira ahora (o null = todo). */
+  const target = () => {
+    if (!scene || watch === 'all') return null
+    if (watch === 'active') return rectOf(scene.wins.find((w) => w.active)?.id)
+    return rectOf(watch)
+  }
+  let lastLook = ''
+  const follow = () => {
+    const r = target()
+    const key = JSON.stringify(r)
+    if (key !== lastLook) { lastLook = key; view.look(r) }
+  }
+
+  /** La barra: «Activa», «Todo» y cada ventana. */
   function showWins () {
     if (!scene) return
     const bar = $(node, '.wins')
-    const byId = new Map(scene.nodes.map((n) => [n.id, n]))
-    const chip = (/** @type {string} */ label, /** @type {Rect | null} */ rect, /** @type {boolean} */ on) => {
-      const b = el(`<button class="chip${on ? ' on' : ''}" data-testid="win-chip">${esc(label)}</button>`)
-      b.addEventListener('click', () => { view.look(rect); showWins() })
+    /** @param {string} label @param {'active' | 'all' | number} what */
+    const chip = (label, what) => {
+      const b = el(`<button class="chip${watch === what ? ' on' : ''}" data-testid="win-chip">${esc(label)}</button>`)
+      b.addEventListener('click', () => { watch = what; follow(); showWins() })
       return b
     }
-    const f = view.focus
-    const items = [chip(t('all_screen'), null, !f)]
-    for (const w of scene.wins) {
-      const n = byId.get(w.id)
-      if (!n || !w.name) continue
-      const rect = { x: n.x, y: n.y, w: n.w, h: n.h }
-      items.push(chip(w.name, rect, !!f && f.x === rect.x && f.y === rect.y && f.w === rect.w))
-    }
+    const items = [chip(t('active_win'), 'active'), chip(t('all_screen'), 'all')]
+    for (const w of scene.wins) if (w.name && rectOf(w.id)) items.push(chip(w.name, w.id))
     bar.replaceChildren(...items)
   }
+
+  // ZOOM: el SVG se hace más ancho que la pantalla y el escenario se desplaza con el dedo
+  // (scroll nativo). Sin trucos de gestos: el navegador ya sabe desplazar.
+  const ZOOMS = [1, 1.5, 2, 3, 4]
+  let zoom = 0
+  // LA BARRA DE ABAJO, GRUESA (dueño, 2026-11-16): un control propio y no la barra del navegador,
+  // que en las tabletas se esconde y no se puede engrosar. Sale solo si hay qué desplazar.
+  const stage = $(node, '.stage')
+  const hscroll = /** @type {HTMLInputElement} */ ($(node, '.hscroll'))
+  const syncBar = () => {
+    const room = stage.scrollWidth - stage.clientWidth
+    hscroll.hidden = room <= 1
+    if (room > 1) hscroll.value = String(Math.round(stage.scrollLeft / room * 1000))
+  }
+  hscroll.addEventListener('input', () => { stage.scrollLeft = Number(hscroll.value) / 1000 * (stage.scrollWidth - stage.clientWidth) })
+  stage.addEventListener('scroll', syncBar, { passive: true })
+  new ResizeObserver(syncBar).observe(stage)
+  const applyZoom = () => { svg.style.width = `${ZOOMS[zoom] * 100}%`; $(node, '[data-testid=zoom-level]').textContent = `${ZOOMS[zoom]}×`; requestAnimationFrame(syncBar) }
+  $(node, '[data-testid=zoom-in]').addEventListener('click', () => { zoom = Math.min(ZOOMS.length - 1, zoom + 1); applyZoom() })
+  $(node, '[data-testid=zoom-out]').addEventListener('click', () => { zoom = Math.max(0, zoom - 1); applyZoom() })
 
   /** @param {Scene} s @param {Set<number> | null} [changed] @param {boolean} [reordered] */
   function paint (s, changed = null, reordered = true) {
     const winsBefore = scene ? JSON.stringify(scene.wins) : ''
     scene = s
     view.show(s, changed, reordered)
+    // Una ventana elegida que se cerró: se vuelve a la activa.
+    if (typeof watch === 'number' && !rectOf(watch)) watch = 'active'
+    follow()
     if (JSON.stringify(s.wins) !== winsBefore) showWins()
   }
 

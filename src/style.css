@@ -58,3 +58,11 @@ a { color: var(--dt-accent); text-underline-offset: 3px; }
 .n.selected > text { fill: var(--dt-accent-soft-ink); }
 .n.focused > rect { stroke: var(--dt-accent); stroke-width: 2; }
 .n.off > text { opacity: .5; }
+.zoom { display: inline-flex; align-items: center; gap: 4px; }
+.zoom .btn { padding: 6px 12px; }
+.zoom [data-testid=zoom-level] { min-width: 2.2em; text-align: center; color: var(--dt-text-dim); font-size: 13px; }
+/* La barra de abajo: gruesa a propósito, para el dedo. */
+.hscroll { -webkit-appearance: none; appearance: none; width: 100%; height: 32px; margin: 8px 0 0; background: var(--dt-surface-2); border: 1px solid var(--dt-line); border-radius: var(--dt-radius-pill); padding: 0 4px; }
+.hscroll[hidden] { display: none; }
+.hscroll::-webkit-slider-thumb { -webkit-appearance: none; width: 64px; height: 24px; border-radius: var(--dt-radius-pill); background: var(--dt-accent); border: none; cursor: grab; }
+.hscroll::-moz-range-thumb { width: 64px; height: 24px; border-radius: var(--dt-radius-pill); background: var(--dt-accent); border: none; cursor: grab; }
