@@ -529,6 +529,24 @@ function desktopScreen (link, sub, name = '') {
   return node
 }
 
+// TEMPORAL (dueño, 2026-11-16): recargar de verdad en el móvil mientras se prueba. Borra las
+// cachés y el service worker, y vuelve a pedir la página saltándose la caché. Quitar al
+// estabilizar (está en PENDIENTES.md).
+{
+  const b = document.getElementById('hard-reload')
+  const commit = document.querySelector('meta[name=commit]')?.getAttribute('content') || 'dev'
+  if (b) {
+    b.title = `Recargar sin caché · ${commit}`
+    b.addEventListener('click', async () => {
+      try { for (const r of await navigator.serviceWorker?.getRegistrations?.() || []) await r.unregister() } catch {}
+      try { for (const k of await caches.keys()) await caches.delete(k) } catch {}
+      const u = new URL(location.href)
+      u.searchParams.set('r', String(Date.now()))
+      location.replace(u.toString())
+    })
+  }
+}
+
 document.documentElement.lang = lang
 render()
 

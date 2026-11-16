@@ -65,3 +65,4 @@ a { color: var(--dt-accent); text-underline-offset: 3px; }
 .hscroll::-moz-range-thumb { width: 64px; height: 24px; border-radius: var(--dt-radius-pill); background: var(--dt-accent); border: none; cursor: grab; }
 .pick { display: inline-flex; align-items: center; gap: 6px; flex: 1; min-width: 0; color: var(--dt-text-dim); font-size: 14px; }
 .pick select { font: inherit; color: var(--dt-text); background: var(--dt-surface); border: 1px solid var(--dt-line); border-radius: var(--dt-radius-pill); padding: 7px 12px; min-width: 0; flex: 1; max-width: 360px; text-overflow: ellipsis; }
+#hard-reload { padding: 6px 12px; font-size: 16px; line-height: 1; }

@@ -42,6 +42,8 @@
   <dotrino-topbar id="topbar" brand="Escritorio remoto" icon="/icon.svg"
     support-repo="imdotrino/dotrino-remote-desktop" support-discord="https://discord.gg/D648uq7cth"
     profile theme>
+    <!-- TEMPORAL (dueño, 2026-11-16, para las pruebas en el móvil): borra caché y service worker y recarga. Quitar al estabilizar. -->
+    <button id="hard-reload" slot="end" class="btn" data-testid="hard-reload" aria-label="Recargar">↻</button>
     <dotrino-install id="install" slot="end" data-testid="install"></dotrino-install>
   </dotrino-topbar>
 
