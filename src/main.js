@@ -19,6 +19,7 @@ import { listAgentsByLabel, probeAgents } from '@dotrino/remote-agent/discover'
 import { keyLabel } from '@dotrino/identity/capabilities'
 import { applyPatch } from '../agent/scene.js'
 import { makeView } from './render.js'
+import { makeVideoLayer, canDecode } from './video.js'
 import { demoScene } from './demo.js'
 import { identity, getLink } from './vault.js'
 
@@ -73,6 +74,8 @@ const M = {
     err_no_a11y: 'Esa máquina no tiene el servicio de accesibilidad del escritorio (at-spi2-core).',
     err_no_raise: 'Esa máquina no deja traer ventanas al frente desde aquí: la ves, pero puede estar tapada por otra.',
     err_window_gone: 'Esa ventana ya no está abierta.',
+    err_no_video: 'Esa máquina no puede enviar la imagen de esta ventana (le falta ffmpeg, o usa Wayland).',
+    video_wait: 'La imagen de esta ventana solo viaja por conexión directa entre tus aparatos. Esperando a que se abra…',
     error: 'Error: '
   },
   en: {
@@ -113,6 +116,8 @@ const M = {
     err_no_a11y: 'That machine has no desktop accessibility service (at-spi2-core).',
     err_no_raise: 'That machine does not let windows be brought to the front from here: you see it, but another may cover it.',
     err_window_gone: 'That window is no longer open.',
+    err_no_video: 'That machine cannot send the picture of this window (it lacks ffmpeg, or uses Wayland).',
+    video_wait: 'The picture of this window only travels over a direct connection between your devices. Waiting for it to open…',
     error: 'Error: '
   }
 }
@@ -155,6 +160,7 @@ function errorText (err) {
   if (e?.code === 'no-session-bus') return t('err_no_desktop')
   if (e?.code === 'no-a11y-bus') return t('err_no_a11y')
   if (e?.code === 'no-raise') return t('err_no_raise')
+  if (e?.code === 'no-video') return t('err_no_video')
   if (e?.code === 'window-not-found') return t('err_window_gone')
   return t('error') + (e?.message || String(e))
 }
@@ -318,6 +324,34 @@ function desktopScreen (link, sub, name = '') {
     const r = rectOf(id ?? undefined)
     const key = JSON.stringify([r, id])
     if (key !== lastLook) { lastLook = key; view.look(r, r ? id : null) }
+    chooseVideo(r ? id : null)
+  }
+
+  // ---------- el vídeo de los huecos (agent/video.js, src/video.js) ----------
+  // De la ventana que se mira: ella entera si no publica nada (Chrome, VS Code), o su hueco más
+  // grande (una foto). Con «Todo el escritorio», ninguno: el vídeo es caro y ahí no se lee nada.
+  const videoLayer = makeVideoLayer(view.overlay, (e) => { status.textContent = errorText(e) })
+  /** @type {number | null} */
+  let videoId = null
+  /** @param {number | null} win */
+  function chooseVideo (win) {
+    let want = null
+    if (win != null && scene && canDecode()) {
+      const w = scene.nodes.find((n) => n.id === win)
+      if (w?.hole) want = win
+      else {
+        let best = 0
+        for (const n of scene.nodes) {
+          if (!n.hole || view.ownerOf(n.id) !== win) continue
+          const area = n.w * n.h
+          if (area > best && n.w >= 64 && n.h >= 64) { best = area; want = n.id }
+        }
+      }
+    }
+    if (want === videoId) return
+    videoId = want
+    videoLayer.clear()
+    if (!demo) send({ type: 'video', id: want })
   }
 
   /**
@@ -344,11 +378,12 @@ function desktopScreen (link, sub, name = '') {
 
   // ZOOM: el SVG se hace más ancho que la pantalla y el escenario se desplaza con el dedo
   // (scroll nativo). Sin trucos de gestos: el navegador ya sabe desplazar.
-  const ZOOMS = [1, 1.5, 2, 3, 4]
-  let zoom = 0
+  // Zoom continuo: los botones lo multiplican y el pellizco con dos dedos lo lleva a mano.
+  const ZOOM_MAX = 6
+  let zoom = 1
   // LA BARRA DE ABAJO, GRUESA (dueño, 2026-11-16): un control propio y no la barra del navegador,
   // que en las tabletas se esconde y no se puede engrosar. Sale solo si hay qué desplazar.
-  const stage = $(node, '.stage')
+  const stage = /** @type {HTMLElement} */ ($(node, '.stage'))
   const hscroll = /** @type {HTMLInputElement} */ ($(node, '.hscroll'))
   const syncBar = () => {
     const room = stage.scrollWidth - stage.clientWidth
@@ -358,9 +393,49 @@ function desktopScreen (link, sub, name = '') {
   hscroll.addEventListener('input', () => { stage.scrollLeft = Number(hscroll.value) / 1000 * (stage.scrollWidth - stage.clientWidth) })
   stage.addEventListener('scroll', syncBar, { passive: true })
   new ResizeObserver(syncBar).observe(stage)
-  const applyZoom = () => { svg.style.width = `${ZOOMS[zoom] * 100}%`; $(node, '[data-testid=zoom-level]').textContent = `${ZOOMS[zoom]}×`; requestAnimationFrame(syncBar) }
-  $(node, '[data-testid=zoom-in]').addEventListener('click', () => { zoom = Math.min(ZOOMS.length - 1, zoom + 1); applyZoom() })
-  $(node, '[data-testid=zoom-out]').addEventListener('click', () => { zoom = Math.max(0, zoom - 1); applyZoom() })
+  /**
+   * Cambia el zoom dejando quieto, bajo el dedo, el punto `cx,cy` (coordenadas del navegador):
+   * lo que se pellizca se queda donde estaba, en vez de irse a la esquina.
+   * @param {number} nz @param {number} [cx] @param {number} [cy]
+   */
+  const setZoom = (nz, cx, cy) => {
+    nz = Math.min(ZOOM_MAX, Math.max(1, nz))
+    const box = stage.getBoundingClientRect()
+    const ax = (cx ?? box.left + box.width / 2) - box.left
+    const ay = (cy ?? box.top + box.height / 2) - box.top
+    const k = nz / zoom
+    const left = (stage.scrollLeft + ax) * k - ax
+    const top = (stage.scrollTop + ay) * k - ay
+    zoom = nz
+    svg.style.width = `${zoom * 100}%`
+    stage.scrollLeft = left; stage.scrollTop = top
+    $(node, '[data-testid=zoom-level]').textContent = `${zoom.toFixed(1).replace(/\.0$/, '')}×`
+    requestAnimationFrame(syncBar)
+  }
+  $(node, '[data-testid=zoom-in]').addEventListener('click', () => setZoom(zoom * 1.5))
+  $(node, '[data-testid=zoom-out]').addEventListener('click', () => setZoom(zoom / 1.5))
+
+  // PELLIZCO CON DOS DEDOS (dueño, 2026-11-16). Un dedo desplaza (scroll nativo del escenario);
+  // dos, hacen zoom alrededor del punto medio. El navegador no hace su propio zoom de página
+  // (touch-action sin pinch-zoom), y un toque que fue parte de un pellizco no es un clic.
+  /** @type {{ d0: number, z0: number } | null} */
+  let pinch = null
+  let pinched = false
+  /** @param {TouchList} t */
+  const spread = (t) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY)
+  stage.addEventListener('touchstart', (e) => {
+    if (e.touches.length === 2) { pinch = { d0: spread(e.touches), z0: zoom }; pinched = true }
+  }, { passive: true })
+  stage.addEventListener('touchmove', (e) => {
+    if (!pinch || e.touches.length !== 2) return
+    e.preventDefault()
+    const t = e.touches
+    setZoom(pinch.z0 * spread(t) / pinch.d0, (t[0].clientX + t[1].clientX) / 2, (t[0].clientY + t[1].clientY) / 2)
+  }, { passive: false })
+  stage.addEventListener('touchend', (e) => {
+    if (e.touches.length < 2) pinch = null
+    if (e.touches.length === 0) setTimeout(() => { pinched = false }, 0)
+  }, { passive: true })
 
   /** @param {Scene} s @param {Set<number> | null} [changed] @param {boolean} [reordered] */
   function paint (s, changed = null, reordered = true) {
@@ -388,7 +463,7 @@ function desktopScreen (link, sub, name = '') {
     const moved = Math.abs(p.x - down.x) + Math.abs(p.y - down.y) > 6
     if (e.pointerType === 'mouse') { if (e.button === 0) send({ type: 'release', ...p, button: 1 }) }
     // Táctil: un toque es un clic donde se tocó; arrastrar no hace nada (se desplaza la vista).
-    else if (!moved) send({ type: 'click', ...p, button: 1 })
+    else if (!moved && !pinched) send({ type: 'click', ...p, button: 1 })
     down = null
     keys.focus({ preventScroll: true })
   })
@@ -437,6 +512,8 @@ function desktopScreen (link, sub, name = '') {
           }
           return
         }
+        if (p.type === 'vframe') { if (p.id === videoId) { status.textContent = ''; videoLayer.frame(p) } return }
+        if (p.type === 'vwait') { if (p.id === videoId) { videoLayer.clear(); status.textContent = t('video_wait') } return }
         if (p.type === 'fail') status.textContent = errorText(p)
       })
       rc.on('error', (/** @type {unknown} */ e) => { status.textContent = errorText(e) })

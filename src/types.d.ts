@@ -13,4 +13,6 @@ export interface Rect { x: number, y: number, w: number, h: number }
 export type AgentMessage =
   | ({ type: 'scene' } & Scene)
   | ({ type: 'patch' } & Patch)
+  | { type: 'vframe', id: number, seq: number, key: boolean, rect: Rect, data: string }
+  | { type: 'vwait', id: number, route: string }
   | { type: 'fail', code: string, message: string }

@@ -24,8 +24,12 @@
  *     { type:'text', text }               escribir un texto
  *     { type:'key', keysym }              una tecla especial, por su keysym de X (Intro, flechas…)
  *     { type:'raise', id }                traer al frente esa ventana (id de su nodo), con el foco
+ *     { type:'video', id }                vídeo de ese nodo (un hueco o una ventana sin contenido);
+ *                                         `id: null` lo para. Sigue al nodo si se mueve.
  *   agente → cliente:
  *     { type:'scene', seq, screen, wins, nodes } · { type:'patch', seq, base, … } (scene.js)
+ *     { type:'vframe', id, seq, key, rect, data }   un cuadro H.264 (Annex B, base64) de ese rectángulo
+ *     { type:'vwait', id, route }         no hay vídeo por este camino (la red de Dotrino): espera al directo
  *     { type:'fail', code, message }
  *
  * Quién puede: cualquier aparato de tu cuenta con `sign` en el acta, igual que la terminal
@@ -37,6 +41,7 @@ import { startRemoteAgent } from '@dotrino/remote-agent/agent'
 import { dataDir, loadLink, LABEL } from './link.js'
 import { makeDesktop } from './desktop.js'
 import { raiseWindow } from './raise.js'
+import { makeVideo, evenRect } from './video.js'
 
 /** @typedef {Awaited<ReturnType<typeof startRemoteAgent>>} RemoteAgent */
 
@@ -69,9 +74,11 @@ const int = (v) => Number.isInteger(v)
  * Atiende una sesión de otro aparato. Exportada para las pruebas.
  * @param {SessionLike} session
  * @param {ReturnType<typeof makeDesktop>} desktop
- * @param {{ log?: (m: string) => void }} [opts]
+ * @param {{ log?: (m: string) => void, route?: () => Promise<string> }} [opts]
+ *   `route`: por dónde va esta sesión ahora (`routeTo` del pilar). El vídeo solo sale por un
+ *   camino que no es la red de Dotrino.
  */
-export function serveSession (session, desktop, { log = () => {} } = {}) {
+export function serveSession (session, desktop, { log = () => {}, route = async () => 'direct' } = {}) {
   /** @type {(() => void) | null} */
   let unwatch = null
   /** @type {(code: string, message: string) => void} */
@@ -80,6 +87,47 @@ export function serveSession (session, desktop, { log = () => {} } = {}) {
   const failWith = (err) => {
     const e = /** @type {{ code?: string, message?: string } | null | undefined} */ (err)
     fail(e?.code || 'desktop-error', e?.message || String(err))
+  }
+
+  // EL VÍDEO DE UN HUECO (video.js): uno por sesión, el del nodo que pidió el cliente.
+  const video = makeVideo({ log })
+  /** @type {number | null} */
+  let videoId = null
+  let vseq = 0
+  // EL VÍDEO NO PASA POR LA RED DE DOTRINO (regla del dueño, 2026-11-01): su proxio y su TURN no
+  // llevan los bytes pesados de los usuarios, ni preguntando. Solo por un camino sin nadie en
+  // medio. Por el proxio el hueco dice que espera la conexión directa, y se mira cada poco.
+  const VIDEO_ROUTES = new Set(['direct', 'socket', 'bluetooth'])
+  /** @type {string | null} */
+  let videoRoute = null
+  /** @type {ReturnType<typeof setInterval> | null} */
+  let routeTimer = null
+  const checkRoute = async () => {
+    let r = 'proxy'
+    try { r = await route() } catch (_) {}
+    if (r === videoRoute) return
+    videoRoute = r
+    if (videoId == null) return
+    if (VIDEO_ROUTES.has(r)) syncVideo()
+    else { video.stop(); session.send({ type: 'vwait', id: videoId, route: r }) }
+  }
+  const watchRoute = (/** @type {boolean} */ on) => {
+    if (on && !routeTimer) { routeTimer = setInterval(() => { checkRoute() }, 3000); routeTimer.unref?.() }
+    if (!on && routeTimer) { clearInterval(routeTimer); routeTimer = null; videoRoute = null }
+  }
+
+  /** Arranca (o rehace, si el nodo se movió) la captura del nodo pedido. */
+  const syncVideo = () => {
+    if (videoId == null) { video.stop(); return }
+    if (!videoRoute || !VIDEO_ROUTES.has(videoRoute)) return
+    const scene = desktop.scene
+    const n = scene.nodes.find((x) => x.id === videoId)
+    const r = n ? evenRect(n, scene.screen) : null
+    if (!r) { video.stop(); return }
+    const id = videoId
+    video.start(r,
+      ({ key, data }) => { session.send({ type: 'vframe', id, seq: vseq++, key, rect: r, data: Buffer.from(data).toString('base64') }) },
+      (e) => { videoId = null; failWith(e) })
   }
 
   /** El lector, o un fallo dicho: sin nadie mirando no hay a quién mandarle el clic. */
@@ -99,12 +147,20 @@ export function serveSession (session, desktop, { log = () => {} } = {}) {
       switch (msg.type) {
         case 'scene': {
           unwatch?.()
-          const w = await desktop.watch((patch) => { session.send({ type: 'patch', ...patch }) })
+          const w = await desktop.watch((patch) => { session.send({ type: 'patch', ...patch }); if (videoId != null) syncVideo() })
           unwatch = w.unwatch
           session.send({ type: 'scene', ...w.scene })
           return
         }
-        case 'leave': unwatch?.(); unwatch = null; return
+        case 'leave': unwatch?.(); unwatch = null; videoId = null; video.stop(); watchRoute(false); return
+        case 'video':
+          if (id !== null && !int(id)) return fail('bad-input', 'video needs a node id, or null to stop')
+          videoId = id
+          if (videoId == null) { video.stop(); watchRoute(false); return }
+          watchRoute(true)
+          videoRoute = null
+          await checkRoute()
+          return
         case 'click': {
           if (!num(x) || !num(y)) return fail('bad-input', 'click needs x and y')
           if (!int(button) || !BUTTONS.has(button)) return fail('bad-input', 'button must be 1, 2 or 3')
@@ -162,7 +218,7 @@ export function serveSession (session, desktop, { log = () => {} } = {}) {
       failWith(e)
     }
   })
-  session.on('close', () => { unwatch?.(); unwatch = null })
+  session.on('close', () => { unwatch?.(); unwatch = null; videoId = null; video.stop(); watchRoute(false) })
 }
 
 /**
@@ -196,7 +252,14 @@ export async function startAgent (opts = {}) {
     quiet: opts.quiet,
     sessionTtlMs: SESSION_IDLE_MS,
     onRevoked: () => { desktop.stop().catch(() => {}); opts.onRevoked?.() },
-    onSession: (session) => serveSession(session, desktop, { log })
+    onSession: (session) => serveSession(session, desktop, {
+      log,
+      route: async () => {
+        const c = /** @type {{ routeTo?: (t: string) => Promise<string> } | undefined} */ (remote?.client)
+        const from = /** @type {{ from?: string }} */ (session).from
+        return c?.routeTo && from ? c.routeTo(from) : 'proxy'
+      }
+    })
   })
   /** @type {ReturnType<typeof setInterval> | null} */
   let retry = null

@@ -27,10 +27,16 @@ permiso `sign`, y todo viaja cifrado de punta a punta. No hay puertos abiertos n
 | Una ventana entera | 150–300 KB | flujo continuo | **~4 KB** comprimidos |
 | Un cambio | el rectángulo entero | cuadros | **bytes** (`este campo dice X`) |
 | Texto | borroso al moverse | borroso en color | **exacto** |
-| Lo que es imagen | sí | sí | **hueco** (fase 2: vídeo de ese rectángulo) |
+| Lo que es imagen | sí | sí | **vídeo de ese rectángulo** (solo si cambia, solo por conexión directa) |
 
 Medido el 2026-11-16 en un XFCE con dos monitores: la escena entera son 525 nodos (57 KB de JSON)
 y los cambios, de 0,3 a 2 KB.
+
+**Los huecos llevan vídeo** (agente ≥ 0.3.0): de la ventana que se mira, ella entera si no publica nada o
+su hueco más grande. `ffmpeg` captura solo ese rectángulo (x11grab → H.264 baseline) y descarta los cuadros
+iguales antes de codificar: una ventana quieta no manda nada. El navegador lo decodifica con WebCodecs.
+**El vídeo no pasa por la red de Dotrino** (ni su proxio ni su TURN): solo por WebRTC directo, socket local
+o Bluetooth; por el proxio el hueco dice que espera la conexión directa.
 
 **El límite, dicho:** lo que no publica accesibilidad no se ve por dentro. Las apps GTK la publican
 siempre. Chrome, VS Code, Slack y demás Electron solo si arrancan con la accesibilidad encendida (el
@@ -50,8 +56,8 @@ hueco con su nombre.
 
 | Sentido | Payload |
 |---|---|
-| cliente → máquina | `scene` · `leave` · `raise {id}` (traer la ventana al frente; X11 con `xdotool`) · `click {x,y,button?,double?}` · `press`/`release {x,y,button?}` · `move {x,y}` · `wheel {x,y,dy}` · `action {id,index?}` · `focus {id}` · `text {text}` · `key {keysym}` |
-| máquina → cliente | `scene {seq,screen,wins,nodes}` · `patch {seq,base,put,del,order?,screen?,wins?}` · `fail {code,message}` |
+| cliente → máquina | `scene` · `leave` · `raise {id}` (traer la ventana al frente; X11 con `xdotool`) · `click {x,y,button?,double?}` · `press`/`release {x,y,button?}` · `move {x,y}` · `wheel {x,y,dy}` · `action {id,index?}` · `focus {id}` · `text {text}` · `key {keysym}` · `video {id\|null}` |
+| máquina → cliente | `scene {seq,screen,wins,nodes}` · `patch {seq,base,put,del,order?,screen?,wins?}` · `vframe {id,seq,key,rect,data}` · `vwait {id,route}` · `fail {code,message}` |
 
 Un nodo: `{id, p (padre), r (rol), n (nombre), t (texto), x, y, w, h, s (estados en letras), a (acciones), hole?}`.
 Un `patch` cuyo `base` no es la escena del cliente se rechaza (`stale`) y el cliente pide la escena

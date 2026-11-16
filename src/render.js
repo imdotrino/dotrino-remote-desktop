@@ -118,7 +118,9 @@ export function makeView (svg, words) {
   /** @type {Map<number, { g: SVGGElement, n: Node }>} */
   const els = new Map()
   const layer = make('g', { class: 'scene' })
-  svg.replaceChildren(layer)
+  // Encima de la escena: el vídeo de los huecos (video.js).
+  const overlay = /** @type {SVGGElement} */ (make('g', { class: 'overlay' }))
+  svg.replaceChildren(layer, overlay)
   /** @type {{ x: number, y: number, w: number, h: number } | null} lo que se está mirando */
   let focus = null
   /** @type {number | null} la única ventana que se dibuja (null = todas) */
@@ -189,5 +191,8 @@ export function makeView (svg, words) {
     return { x: Math.round(p.x), y: Math.round(p.y) }
   }
 
-  return { show, look, toScreen, get focus () { return focus } }
+  /** La ventana a la que pertenece un nodo (o -1). @param {number} id */
+  const ownerOf = (id) => owner.get(id) ?? -1
+
+  return { show, look, toScreen, ownerOf, overlay, get focus () { return focus } }
 }
