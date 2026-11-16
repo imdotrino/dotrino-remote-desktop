@@ -57,8 +57,9 @@ const M = {
     machine_offline: 'Desconectada',
     connecting: (n) => `Conectando con ${n}…`,
     conn_fail: (n) => `No se pudo conectar con ${n}.`,
-    all_screen: 'Todo',
-    active_win: 'Activa',
+    all_screen: 'Todo el escritorio',
+    active_win: 'Ventana activa',
+    view: 'Ver',
     zoom_in: 'Acercar',
     zoom_out: 'Alejar',
     hscroll: 'Desplazar a los lados',
@@ -94,8 +95,9 @@ const M = {
     machine_offline: 'Offline',
     connecting: (n) => `Connecting to ${n}…`,
     conn_fail: (n) => `Could not connect to ${n}.`,
-    all_screen: 'All',
-    active_win: 'Active',
+    all_screen: 'Whole desktop',
+    active_win: 'Active window',
+    view: 'View',
     zoom_in: 'Zoom in',
     zoom_out: 'Zoom out',
     hscroll: 'Scroll sideways',
@@ -263,7 +265,7 @@ function desktopScreen (link, sub, name = '') {
   const demo = sub === 'demo'
   const node = el(`<section class="desktop" data-testid="desktop">
     <div class="dbar">
-      <div class="wins" data-testid="wins"></div>
+      <label class="pick"><span>${t('view')}</span><select data-testid="view-picker"></select></label>
       <span class="zoom"><button class="btn" data-testid="zoom-out" aria-label="${t('zoom_out')}">−</button><span data-testid="zoom-level">1×</span><button class="btn" data-testid="zoom-in" aria-label="${t('zoom_in')}">+</button></span>
       <button class="btn" data-testid="keyboard">${t('keyboard')}</button>
       ${demo ? '' : `<button class="btn" data-testid="disconnect">${t('disconnect')}</button>`}
@@ -311,19 +313,24 @@ function desktopScreen (link, sub, name = '') {
     if (key !== lastLook) { lastLook = key; view.look(r) }
   }
 
-  /** La barra: «Activa», «Todo» y cada ventana. */
+  /**
+   * QUÉ VER, en UN desplegable: la ventana activa, todo el escritorio o una ventana. Antes eran
+   * botones, uno por ventana, y con 26 ventanas abiertas la fila no se entendía (dueño, 2026-11-16).
+   */
+  const picker = /** @type {HTMLSelectElement} */ ($(node, '[data-testid=view-picker]'))
+  picker.addEventListener('change', () => {
+    const v = picker.value
+    watch = v === 'active' || v === 'all' ? v : Number(v)
+    follow()
+  })
   function showWins () {
     if (!scene) return
-    const bar = $(node, '.wins')
-    /** @param {string} label @param {'active' | 'all' | number} what */
-    const chip = (label, what) => {
-      const b = el(`<button class="chip${watch === what ? ' on' : ''}" data-testid="win-chip">${esc(label)}</button>`)
-      b.addEventListener('click', () => { watch = what; follow(); showWins() })
-      return b
-    }
-    const items = [chip(t('active_win'), 'active'), chip(t('all_screen'), 'all')]
-    for (const w of scene.wins) if (w.name && rectOf(w.id)) items.push(chip(w.name, w.id))
-    bar.replaceChildren(...items)
+    /** @param {string} value @param {string} label */
+    const opt = (value, label) => { const o = document.createElement('option'); o.value = value; o.textContent = label; return o }
+    const opts = [opt('active', t('active_win')), opt('all', t('all_screen'))]
+    for (const w of scene.wins) if (w.name && rectOf(w.id)) opts.push(opt(String(w.id), w.name))
+    picker.replaceChildren(...opts)
+    picker.value = String(watch)
   }
 
   // ZOOM: el SVG se hace más ancho que la pantalla y el escenario se desplaza con el dedo

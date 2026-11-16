@@ -32,9 +32,6 @@ a { color: var(--dt-accent); text-underline-offset: 3px; }
 /* El escritorio. */
 .desktop { width: 100%; flex: 1; display: flex; flex-direction: column; min-height: 0; }
 .dbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-.wins { display: flex; gap: 6px; overflow-x: auto; flex: 1; min-width: 0; padding-bottom: 2px; }
-.chip { flex-shrink: 0; font: inherit; font-size: 13px; white-space: nowrap; max-width: 220px; overflow: hidden; text-overflow: ellipsis; padding: 5px 10px; border-radius: var(--dt-radius-pill); border: 1px solid var(--dt-line); background: var(--dt-surface); color: var(--dt-text); cursor: pointer; }
-.chip.on { background: var(--dt-accent-soft); color: var(--dt-accent-soft-ink); border-color: var(--dt-accent); }
 .stage { flex: 1; min-height: 0; overflow: auto; background: var(--dt-bg-2); border: 1px solid var(--dt-line); border-radius: var(--dt-radius); touch-action: pan-x pan-y pinch-zoom; }
 .screen { width: 100%; height: auto; display: block; user-select: none; -webkit-user-select: none; }
 .keys { position: fixed; left: -9999px; top: 0; width: 1px; height: 1px; opacity: 0; }
@@ -66,3 +63,5 @@ a { color: var(--dt-accent); text-underline-offset: 3px; }
 .hscroll[hidden] { display: none; }
 .hscroll::-webkit-slider-thumb { -webkit-appearance: none; width: 64px; height: 24px; border-radius: var(--dt-radius-pill); background: var(--dt-accent); border: none; cursor: grab; }
 .hscroll::-moz-range-thumb { width: 64px; height: 24px; border-radius: var(--dt-radius-pill); background: var(--dt-accent); border: none; cursor: grab; }
+.pick { display: inline-flex; align-items: center; gap: 6px; flex: 1; min-width: 0; color: var(--dt-text-dim); font-size: 14px; }
+.pick select { font: inherit; color: var(--dt-text); background: var(--dt-surface); border: 1px solid var(--dt-line); border-radius: var(--dt-radius-pill); padding: 7px 12px; min-width: 0; flex: 1; max-width: 360px; text-overflow: ellipsis; }
