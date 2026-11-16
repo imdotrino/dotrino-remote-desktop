@@ -23,6 +23,10 @@ import { demoScene } from './demo.js'
 import { identity, getLink } from './vault.js'
 
 /** @typedef {import('../agent/scene.js').Scene} Scene */
+/** @typedef {import('./types').AgentError} AgentError */
+/** @typedef {import('./types').DesktopLink} DesktopLink */
+/** @typedef {import('./types').Rect} Rect */
+/** @typedef {import('./types').AgentMessage} AgentMessage */
 
 /** Lo que contesta el agente cuando se le pregunta qué es (agent/link.js). */
 const AGENT_KIND = 'remote-desktop-agent'
@@ -101,7 +105,7 @@ const M = {
 
 /** @param {string} what @returns {never} */
 function missing (what) { throw new Error(`index.html has no ${what}`) }
-const topbar = /** @type {any} */ (document.getElementById('topbar') ?? missing('#topbar'))
+const topbar = /** @type {import('@dotrino/topbar').DotrinoTopbar} */ (document.getElementById('topbar') ?? missing('#topbar'))
 const app = document.getElementById('app') ?? missing('#app')
 
 /** @type {'es' | 'en'} */
@@ -129,8 +133,9 @@ function $ (root, sel) {
   return /** @type {T} */ (found)
 }
 
-/** Un error del agente, en palabras de la persona: por su `code`. @param {any} e */
-function errorText (e) {
+/** Un error del agente, en palabras de la persona: por su `code`. @param {unknown} err */
+function errorText (err) {
+  const e = /** @type {AgentError | null | undefined} */ (err)
   if (e?.code === 'unauthorized') return t('err_unauthorized', e.reason || '?')
   if (e?.code === 'blocked') return t('err_blocked')
   if (e?.code === 'no-session-bus') return t('err_no_desktop')
@@ -181,18 +186,18 @@ async function render () {
     app.replaceChildren(node)
     return
   }
-  app.replaceChildren(machinesScreen(/** @type {any} */ (link)))
+  app.replaceChildren(machinesScreen(/** @type {DesktopLink} */ (link)))
 }
 
 /**
  * La lista de máquinas con el agente de escritorio encendido (se les pregunta qué son).
- * @param {any} link
+ * @param {DesktopLink} link
  */
 function machinesScreen (link) {
   const node = el(`<section class="machines" data-testid="machines"><span class="mlabel">${t('machines_title')}</span><div class="machine-list"></div><p class="status" data-testid="machines-status"></p></section>`)
   const list = $(node, '.machine-list')
   const status = $(node, '.status')
-  /** @type {any} */
+  /** @type {import('@dotrino/proxy-client').WebSocketProxyClient | null} */
   let probe = null
   /** @type {ReturnType<typeof setInterval> | null} */
   let timer = null
@@ -244,7 +249,7 @@ const KEYSYMS = {
 
 /**
  * La pantalla de UN escritorio. `sub === 'demo'` enseña la escena de muestra, sin red.
- * @param {any} link @param {string} sub @param {string} [name]
+ * @param {DesktopLink | null} link @param {string} sub @param {string} [name]
  */
 function desktopScreen (link, sub, name = '') {
   const demo = sub === 'demo'
@@ -267,14 +272,14 @@ function desktopScreen (link, sub, name = '') {
   /** @type {RemoteAgentClient | null} */
   let rc = null
   /** @param {object} msg */
-  const send = (msg) => { if (rc) rc.send(msg).catch((/** @type {any} */ e) => { status.textContent = errorText(e) }) }
+  const send = (msg) => { if (rc) rc.send(msg).catch((/** @type {unknown} */ e) => { status.textContent = errorText(e) }) }
 
   /** La barra con las ventanas: tocar una la amplía; «Todo», el escritorio entero. */
   function showWins () {
     if (!scene) return
     const bar = $(node, '.wins')
     const byId = new Map(scene.nodes.map((n) => [n.id, n]))
-    const chip = (/** @type {string} */ label, /** @type {any} */ rect, /** @type {boolean} */ on) => {
+    const chip = (/** @type {string} */ label, /** @type {Rect | null} */ rect, /** @type {boolean} */ on) => {
       const b = el(`<button class="chip${on ? ' on' : ''}" data-testid="win-chip">${esc(label)}</button>`)
       b.addEventListener('click', () => { view.look(rect); showWins() })
       return b
@@ -346,8 +351,9 @@ function desktopScreen (link, sub, name = '') {
   node.querySelector('[data-testid=disconnect]')?.addEventListener('click', () => { teardown?.(); teardown = null; render() })
   ;(async () => {
     try {
+      if (!link) throw Object.assign(new Error('no link to the vault'), { code: 'not-linked' })
       rc = new RemoteAgentClient(link, { agentPubkey: sub })
-      rc.on('message', (/** @type {any} */ p) => {
+      rc.on('message', (/** @type {AgentMessage | null} */ p) => {
         if (!p || typeof p !== 'object') return
         if (p.type === 'scene') { status.textContent = ''; paint(p); return }
         if (p.type === 'patch') {
@@ -363,7 +369,7 @@ function desktopScreen (link, sub, name = '') {
         }
         if (p.type === 'fail') status.textContent = errorText(p)
       })
-      rc.on('error', (/** @type {any} */ e) => { status.textContent = errorText(e) })
+      rc.on('error', (/** @type {unknown} */ e) => { status.textContent = errorText(e) })
       // La máquina se reinició y la sesión se rehízo sola: se vuelve a pedir la escena.
       rc.on('resumed', () => send({ type: 'scene' }))
       await rc.connect()

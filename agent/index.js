@@ -55,11 +55,13 @@ const BUTTONS = new Set([1, 2, 3])
 const MAX_TYPED = 10_000
 
 /**
- * @typedef {{ device?: string|null, send: (p: object) => unknown, on: (ev: 'message'|'close', cb: (msg?: any) => void) => unknown }} SessionLike
+ * @typedef {{ device?: string|null, send: (p: object) => unknown, on: (ev: 'message'|'close', cb: (msg?: unknown) => void) => unknown }} SessionLike
  */
 
-/** @param {unknown} v */
+/** @param {unknown} v @returns {v is number} */
 const num = (v) => typeof v === 'number' && Number.isFinite(v)
+/** @param {unknown} v @returns {v is number} */
+const int = (v) => Number.isInteger(v)
 
 /**
  * Atiende una sesión de otro aparato. Exportada para las pruebas.
@@ -72,8 +74,11 @@ export function serveSession (session, desktop, { log = () => {} } = {}) {
   let unwatch = null
   /** @type {(code: string, message: string) => void} */
   const fail = (code, message) => { session.send({ type: 'fail', code, message }) }
-  /** @param {any} e */
-  const failWith = (e) => fail(e?.code || 'desktop-error', e?.message || String(e))
+  /** @param {unknown} err */
+  const failWith = (err) => {
+    const e = /** @type {{ code?: string, message?: string } | null | undefined} */ (err)
+    fail(e?.code || 'desktop-error', e?.message || String(err))
+  }
 
   /** El lector, o un fallo dicho: sin nadie mirando no hay a quién mandarle el clic. */
   const reader = () => {
@@ -82,8 +87,12 @@ export function serveSession (session, desktop, { log = () => {} } = {}) {
     return r
   }
 
-  session.on('message', async (msg) => {
-    if (!msg || typeof msg !== 'object') return
+  session.on('message', async (raw) => {
+    if (!raw || typeof raw !== 'object') return
+    // Lo que llega es JSON de otro aparato: cada campo se comprueba antes de usarlo.
+    const msg = /** @type {Record<string, unknown>} */ (raw)
+    const { x, y, dy, id, index, text, keysym, double } = msg
+    const button = msg.button ?? 1
     try {
       switch (msg.type) {
         case 'scene': {
@@ -95,48 +104,46 @@ export function serveSession (session, desktop, { log = () => {} } = {}) {
         }
         case 'leave': unwatch?.(); unwatch = null; return
         case 'click': {
-          if (!num(msg.x) || !num(msg.y)) return fail('bad-input', 'click needs x and y')
-          const b = msg.button ?? 1
-          if (!BUTTONS.has(b)) return fail('bad-input', 'button must be 1, 2 or 3')
-          await reader().mouse(msg.x, msg.y, 'abs')
-          await reader().mouse(msg.x, msg.y, `b${b}${msg.double ? 'd' : 'c'}`)
+          if (!num(x) || !num(y)) return fail('bad-input', 'click needs x and y')
+          if (!int(button) || !BUTTONS.has(button)) return fail('bad-input', 'button must be 1, 2 or 3')
+          await reader().mouse(x, y, 'abs')
+          await reader().mouse(x, y, `b${button}${double ? 'd' : 'c'}`)
           return
         }
         case 'press': case 'release': {
-          if (!num(msg.x) || !num(msg.y)) return fail('bad-input', `${msg.type} needs x and y`)
-          const b = msg.button ?? 1
-          if (!BUTTONS.has(b)) return fail('bad-input', 'button must be 1, 2 or 3')
-          await reader().mouse(msg.x, msg.y, 'abs')
-          await reader().mouse(msg.x, msg.y, `b${b}${msg.type === 'press' ? 'p' : 'r'}`)
+          if (!num(x) || !num(y)) return fail('bad-input', `${msg.type} needs x and y`)
+          if (!int(button) || !BUTTONS.has(button)) return fail('bad-input', 'button must be 1, 2 or 3')
+          await reader().mouse(x, y, 'abs')
+          await reader().mouse(x, y, `b${button}${msg.type === 'press' ? 'p' : 'r'}`)
           return
         }
         case 'move':
-          if (!num(msg.x) || !num(msg.y)) return fail('bad-input', 'move needs x and y')
-          await reader().mouse(msg.x, msg.y, 'abs')
+          if (!num(x) || !num(y)) return fail('bad-input', 'move needs x and y')
+          await reader().mouse(x, y, 'abs')
           return
         case 'wheel': {
-          if (!num(msg.x) || !num(msg.y) || !num(msg.dy)) return fail('bad-input', 'wheel needs x, y and dy')
-          await reader().mouse(msg.x, msg.y, 'abs')
-          const steps = Math.min(10, Math.max(1, Math.round(Math.abs(msg.dy))))
-          for (let i = 0; i < steps; i++) await reader().mouse(msg.x, msg.y, msg.dy < 0 ? 'b4c' : 'b5c')
+          if (!num(x) || !num(y) || !num(dy)) return fail('bad-input', 'wheel needs x, y and dy')
+          await reader().mouse(x, y, 'abs')
+          const steps = Math.min(10, Math.max(1, Math.round(Math.abs(dy))))
+          for (let i = 0; i < steps; i++) await reader().mouse(x, y, dy < 0 ? 'b4c' : 'b5c')
           return
         }
         case 'action':
-          if (!Number.isInteger(msg.id)) return fail('bad-input', 'action needs a node id')
-          await reader().doAction(msg.id, Number.isInteger(msg.index) ? msg.index : 0)
+          if (!int(id)) return fail('bad-input', 'action needs a node id')
+          await reader().doAction(id, int(index) ? index : 0)
           return
         case 'focus':
-          if (!Number.isInteger(msg.id)) return fail('bad-input', 'focus needs a node id')
-          await reader().focus(msg.id)
+          if (!int(id)) return fail('bad-input', 'focus needs a node id')
+          await reader().focus(id)
           return
         case 'text':
-          if (typeof msg.text !== 'string' || !msg.text) return fail('bad-input', 'text needs some text')
-          if (msg.text.length > MAX_TYPED) return fail('too-long', `at most ${MAX_TYPED} characters at a time`)
-          await reader().key({ text: msg.text })
+          if (typeof text !== 'string' || !text) return fail('bad-input', 'text needs some text')
+          if (text.length > MAX_TYPED) return fail('too-long', `at most ${MAX_TYPED} characters at a time`)
+          await reader().key({ text })
           return
         case 'key':
-          if (!Number.isInteger(msg.keysym) || msg.keysym <= 0) return fail('bad-input', 'key needs a keysym')
-          await reader().key({ keysym: msg.keysym })
+          if (!int(keysym) || keysym <= 0) return fail('bad-input', 'key needs a keysym')
+          await reader().key({ keysym })
           return
         default:
           return fail('unknown-type', `unknown message type: ${String(msg.type).slice(0, 32)}`)

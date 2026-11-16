@@ -156,7 +156,7 @@ export function makeReader (bus) {
 
   /**
    * @param {Ref} ref @param {string} iface @param {string} member
-   * @param {string} [signature] @param {any[]} [body]
+   * @param {string} [signature] @param {import('@dotrino/proxy-client/dbus').DBusValue[]} [body]  valores de D-Bus: su forma la dice `signature`
    */
   const call = (ref, iface, member, signature = '', body = []) =>
     bus.call({ destination: ref[0], path: ref[1], iface, member, signature, body })
@@ -186,7 +186,7 @@ export function makeReader (bus) {
         prop(ref, I_ACC, 'Name'),
         has.has(I_COMP) ? call(ref, I_COMP, 'GetExtents', 'u', [0]).then((r) => r[0]) : null,
         prop(ref, I_ACC, 'ChildCount'),
-        has.has(I_ACTION) ? call(ref, I_ACTION, 'GetActions').then((r) => r[0].map((/** @type {any[]} */ a) => a[0])).catch(() => []) : []
+        has.has(I_ACTION) ? call(ref, I_ACTION, 'GetActions').then((r) => r[0].map((/** @type {[string, string, string]} */ a) => a[0])).catch(() => []) : []
       ])
       let text = ''
       if (has.has(I_TEXT) && TEXT_ROLES.has(role)) {
