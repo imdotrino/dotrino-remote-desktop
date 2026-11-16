@@ -1,0 +1,17 @@
+{
+  "name": "Escritorio remoto — Dotrino",
+  "short_name": "Escritorio",
+  "description": "Usa el escritorio de tu computadora desde el navegador de otro aparato tuyo. Nítido, ligero, y solo entran tus aparatos.",
+  "start_url": "/desktops",
+  "scope": "/",
+  "launch_handler": { "client_mode": "focus-existing" },
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f7fafc",
+  "theme_color": "#00658c",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

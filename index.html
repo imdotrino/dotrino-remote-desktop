@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Escritorio remoto — Dotrino</title>
+  <meta name="description" content="Usa el escritorio de tu computadora desde el navegador de tu teléfono u otro aparato tuyo. Se ve nítido y gasta muy pocos datos. Solo entran los aparatos que enlaces con tu bóveda." />
+  <link rel="canonical" href="https://remote-desktop.dotrino.com/" />
+
+  <meta name="theme-color" content="#00658c" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Escritorio remoto" />
+  <link rel="apple-touch-icon" href="/icon-192.png" />
+  <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Dotrino" />
+  <meta property="og:title" content="Escritorio remoto — Dotrino" />
+  <meta property="og:description" content="Usa el escritorio de tu computadora desde tu teléfono. Nítido, ligero, y solo entran tus aparatos." />
+  <meta property="og:url" content="https://remote-desktop.dotrino.com/" />
+  <meta property="og:image" content="https://remote-desktop.dotrino.com/og.jpg" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:locale" content="es_ES" />
+  <meta property="og:locale:alternate" content="en_US" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Escritorio remoto — Dotrino" />
+  <meta name="twitter:description" content="Usa el escritorio de tu computadora desde tu teléfono. Nítido, ligero, y solo entran tus aparatos." />
+  <meta name="twitter:image" content="https://remote-desktop.dotrino.com/og.jpg" />
+
+  <script type="application/ld+json">
+  {"@context":"https://schema.org","@type":"WebApplication","name":"Dotrino Remote Desktop","url":"https://remote-desktop.dotrino.com/","description":"Usa el escritorio de tu computadora desde el navegador de otro aparato tuyo; solo entran los aparatos que enlaces con tu bóveda.","applicationCategory":"UtilitiesApplication","operatingSystem":"Web","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"publisher":{"@type":"Organization","name":"Dotrino","url":"https://dotrino.com/"}}
+  </script>
+
+  <!-- Analítica cookieless autohosteada (GoatCounter); no cuenta en localhost/LAN. -->
+  <script>window.goatcounter={path:function(p){return location.hostname+p}}</script>
+  <script data-goatcounter="https://goat.dotrino.com/count" async src="https://goat.dotrino.com/count.js"></script>
+</head>
+<body>
+  <dotrino-topbar id="topbar" brand="Escritorio remoto" icon="/icon.svg"
+    support-repo="imdotrino/dotrino-remote-desktop" support-discord="https://discord.gg/D648uq7cth"
+    profile theme>
+    <dotrino-install id="install" slot="end" data-testid="install"></dotrino-install>
+  </dotrino-topbar>
+
+  <main id="app"></main>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

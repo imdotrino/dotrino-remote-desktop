@@ -1,0 +1,60 @@
+/* Dotrino Remote Desktop. Todo con los tokens del tema (@dotrino/theme, §5): nada de paleta propia. */
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { background: var(--dt-bg); color: var(--dt-text); font-family: var(--dt-font); display: flex; flex-direction: column; min-height: 100vh; }
+main { flex: 1; display: flex; flex-direction: column; align-items: center; padding: 16px; min-height: 0; }
+a { color: var(--dt-accent); text-underline-offset: 3px; }
+
+.btn { font: inherit; padding: 8px 14px; border-radius: var(--dt-radius-pill); border: 1px solid var(--dt-line); background: var(--dt-surface); color: var(--dt-text); cursor: pointer; text-decoration: none; display: inline-block; user-select: none; }
+.btn.primary { background: var(--dt-accent); color: var(--dt-accent-ink); border-color: var(--dt-accent); }
+.card { width: 100%; max-width: 820px; background: var(--dt-surface); border: 1px solid var(--dt-line); border-radius: var(--dt-radius-lg); padding: 22px; }
+.status { color: var(--dt-text-dim); margin: 8px 0; min-height: 1.2em; }
+
+/* Portada (informativa). */
+.home { width: 100%; max-width: 820px; padding: 24px 4px; }
+.home h1 { font-family: var(--dt-font-brand); font-size: clamp(1.6rem, 5vw, 2.4rem); margin: 8px 0 12px; line-height: 1.2; }
+.home .lead { font-size: 1.1rem; line-height: 1.6; margin: 0 0 22px; max-width: 640px; }
+.home-cta { display: flex; flex-wrap: wrap; gap: 10px; }
+.home-how { margin: 14px 0 24px; }
+.home-points { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.point { background: var(--dt-surface); border: 1px solid var(--dt-line); border-radius: var(--dt-radius); padding: 14px; display: flex; flex-direction: column; gap: 6px; line-height: 1.5; }
+.point span { color: var(--dt-text-dim); }
+
+/* Tus escritorios (administrativa). */
+.machines { width: 100%; max-width: 820px; }
+.mlabel { font-weight: 600; color: var(--dt-text-dim); }
+.machine-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.machine { font: inherit; display: inline-flex; align-items: center; gap: 8px; padding: 10px 14px; border-radius: var(--dt-radius); border: 1px solid var(--dt-line); background: var(--dt-surface); color: var(--dt-text); cursor: pointer; }
+.machine small { color: var(--dt-text-faint); }
+.mdot { width: 9px; height: 9px; border-radius: 50%; background: var(--dt-text-faint); }
+.mdot.on { background: var(--dt-ok); }
+
+/* El escritorio. */
+.desktop { width: 100%; flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.dbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.wins { display: flex; gap: 6px; overflow-x: auto; flex: 1; min-width: 0; padding-bottom: 2px; }
+.chip { flex-shrink: 0; font: inherit; font-size: 13px; white-space: nowrap; max-width: 220px; overflow: hidden; text-overflow: ellipsis; padding: 5px 10px; border-radius: var(--dt-radius-pill); border: 1px solid var(--dt-line); background: var(--dt-surface); color: var(--dt-text); cursor: pointer; }
+.chip.on { background: var(--dt-accent-soft); color: var(--dt-accent-soft-ink); border-color: var(--dt-accent); }
+.stage { flex: 1; min-height: 0; overflow: auto; background: var(--dt-bg-2); border: 1px solid var(--dt-line); border-radius: var(--dt-radius); touch-action: pan-x pan-y pinch-zoom; }
+.screen { width: 100%; height: auto; display: block; user-select: none; -webkit-user-select: none; }
+.keys { position: fixed; left: -9999px; top: 0; width: 1px; height: 1px; opacity: 0; }
+
+/* Los nodos. El aspecto es del tema, no de la app de la máquina: es un esquema funcional. */
+.screen text { fill: var(--dt-text); font-family: var(--dt-font); dominant-baseline: auto; pointer-events: none; }
+.n rect { stroke-width: 1; }
+.n.win > rect { fill: var(--dt-surface); stroke: var(--dt-line); filter: drop-shadow(0 2px 6px var(--dt-shadow-color)); }
+.n.win > text { font-weight: 600; fill: var(--dt-text-dim); }
+.n.band > rect { fill: var(--dt-surface-2); stroke: none; }
+.n.btn > rect { fill: var(--dt-surface-3); stroke: var(--dt-line); }
+.n.field > rect { fill: var(--dt-bg); stroke: var(--dt-accent); }
+.n.cell > rect { fill: transparent; stroke: none; }
+.n.check .box { fill: var(--dt-bg); stroke: var(--dt-text-dim); }
+.n.check .mark { fill: var(--dt-accent); }
+.n.check > rect:first-child { fill: transparent; stroke: none; }
+.n.heading text { font-weight: 700; }
+.n.hole > rect { fill: var(--dt-bg-2); stroke: var(--dt-text-faint); stroke-dasharray: 6 4; }
+.n.hole > text { fill: var(--dt-text-faint); font-style: italic; }
+.n.selected > rect { fill: var(--dt-accent-soft); }
+.n.selected > text { fill: var(--dt-accent-soft-ink); }
+.n.focused > rect { stroke: var(--dt-accent); stroke-width: 2; }
+.n.off > text { opacity: .5; }

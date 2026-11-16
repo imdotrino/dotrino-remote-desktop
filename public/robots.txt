@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://remote-desktop.dotrino.com/sitemap.xml
