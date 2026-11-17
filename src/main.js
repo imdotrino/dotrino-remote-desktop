@@ -80,6 +80,7 @@ const M = {
     err_no_video: 'Esa máquina no puede enviar la imagen de esta ventana (le falta ffmpeg, o usa Wayland).',
     err_old_agent: 'Esa máquina tiene una versión anterior del escritorio remoto: actualízala para ver la imagen de las ventanas y traerlas al frente.',
     video_wait: 'La imagen de esta ventana solo viaja por conexión directa entre tus aparatos. Esperando a que se abra…',
+    video_loading: 'Cargando imagen…',
     video_low: 'Imagen reducida: tus aparatos no están conectados directamente, y así gasta menos.',
     error: 'Error: '
   },
@@ -127,6 +128,7 @@ const M = {
     err_no_video: 'That machine cannot send the picture of this window (it lacks ffmpeg, or uses Wayland).',
     err_old_agent: 'That machine runs an older version of the remote desktop: update it to see the picture of windows and bring them to the front.',
     video_wait: 'The picture of this window only travels over a direct connection between your devices. Waiting for it to open…',
+    video_loading: 'Loading picture…',
     video_low: 'Reduced picture: your devices are not connected directly, so it uses less data.',
     error: 'Error: '
   }
@@ -381,11 +383,29 @@ function desktopScreen (link, sub, name = '') {
   let videoGot = false
   /** @type {ReturnType<typeof setTimeout> | null} */
   let videoRetry = null
+  // MIENTRAS LLEGA: un círculo que gira en el centro del hueco, hasta el primer cuadro (dueño,
+  // 2026-11-16: «si no carga la imagen, algo que indique que pronto llegará»).
+  const spinner = /** @type {SVGGElement} */ (document.createElementNS('http://www.w3.org/2000/svg', 'g'))
+  spinner.setAttribute('class', 'vspin')
+  spinner.innerHTML = '<g class="vspin-turn"><circle r="40" fill="none" stroke-width="8" pathLength="100" stroke-dasharray="70 30"/></g><text y="80" text-anchor="middle"></text>'
+  spinner.style.display = 'none'
+  svg.appendChild(spinner)
+  /** @param {number | null} id */
+  const showSpinner = (id) => {
+    const r = id != null ? rectOf(id) : null
+    if (!r || demo) { spinner.style.display = 'none'; return }
+    // Del tamaño del hueco, para que se vea con cualquier zoom.
+    const k = Math.max(0.3, Math.min(r.w, r.h) / 400)
+    spinner.setAttribute('transform', `translate(${r.x + r.w / 2} ${r.y + r.h / 2}) scale(${k})`)
+    const tx = spinner.querySelector('text'); if (tx) tx.textContent = t('video_loading')
+    spinner.style.display = ''
+  }
   /** @param {number} tries */
   function requestVideo (tries) {
     if (videoRetry) { clearTimeout(videoRetry); videoRetry = null }
     if (demo) return
     videoGot = false
+    showSpinner(videoId)
     send({ type: 'video', id: videoId })
     if (videoId == null || tries >= 3) return
     const id = videoId
@@ -738,6 +758,7 @@ function desktopScreen (link, sub, name = '') {
         }
         if (p.type === 'vframe') {
           if (p.id !== videoId) return
+          if (!videoGot) spinner.style.display = 'none'
           videoGot = true
           // Por el proxio la imagen va reducida (un cuarto de los píxeles, 3 por segundo): se dice.
           const msg = p.q === 'relay' ? t('video_low') : ''

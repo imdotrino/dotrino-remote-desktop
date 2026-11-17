@@ -76,3 +76,9 @@ a { color: var(--dt-accent); text-underline-offset: 3px; }
 .task { flex-shrink: 0; font: inherit; font-size: 13px; max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 6px 12px; border-radius: var(--dt-radius-pill); border: 1px solid var(--dt-line); background: var(--dt-surface); color: var(--dt-text); cursor: pointer; }
 .task.fixed { font-weight: 600; }
 .task.on { background: var(--dt-accent); color: var(--dt-accent-ink); border-color: var(--dt-accent); }
+/* Mientras llega la imagen de un hueco. */
+.vspin { pointer-events: none; }
+.vspin circle { stroke: var(--dt-accent); }
+.vspin text { fill: var(--dt-text-dim); font-size: 28px; font-family: var(--dt-font); }
+.vspin-turn { animation: vspin 0.9s linear infinite; }
+@keyframes vspin { to { transform: rotate(360deg); } }
