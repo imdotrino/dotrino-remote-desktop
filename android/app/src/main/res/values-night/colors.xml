@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- «Cool & Cozy» oscuro (@dotrino/theme). -->
+<resources>
+    <color name="rd_bg">#0F1416</color>
+    <color name="rd_bg2">#181C1E</color>
+    <color name="rd_surface">#1C2022</color>
+    <color name="rd_surface2">#262A2D</color>
+    <color name="rd_surface3">#313538</color>
+    <color name="rd_line">#3F484E</color>
+    <color name="rd_text">#DFE3E6</color>
+    <color name="rd_text_dim">#BFC8CF</color>
+    <color name="rd_text_faint">#899296</color>
+    <color name="rd_accent">#81CFFF</color>
+    <color name="rd_accent_ink">#003549</color>
+    <color name="rd_accent_soft">#004C6B</color>
+    <color name="rd_accent_soft_ink">#C6E7FF</color>
+    <color name="rd_ok">#7AD7C2</color>
+    <color name="rd_error">#FFB4AB</color>
+    <color name="dotrino_bg">#0F1416</color>
+    <color name="dotrino_card">#1C2022</color>
+    <color name="dotrino_fg">#DFE3E6</color>
+    <color name="dotrino_muted">#BFC8CF</color>
+    <color name="dotrino_accent">#81CFFF</color>
+</resources>

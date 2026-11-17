@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- English. Spanish (neutral, tuteo) is in values-es. Same wording as the PWA (src/main.js). -->
+<resources>
+    <string name="app_name">Remote Desktop</string>
+    <string name="brand">Remote Desktop</string>
+    <string name="machines_title">Your desktops</string>
+    <string name="machines_loading">Looking for your desktops…</string>
+    <string name="machines_none">None of your machines has the remote desktop running.</string>
+    <string name="machines_err">Could not reach your vault (is it on?). %1$s</string>
+    <string name="machines_refresh">Look again</string>
+    <string name="machines_howto">How to set it up</string>
+    <string name="machine_online">Online</string>
+    <string name="connecting">Connecting to %1$s…</string>
+    <string name="conn_fail">Could not connect to %1$s.</string>
+    <string name="reconnecting">Nothing is arriving from %1$s: connecting again…</string>
+    <string name="active_short">Active</string>
+    <string name="all_short">All</string>
+    <string name="screen">Screen</string>
+    <string name="screen_n">Screen %1$d</string>
+    <string name="taskbar">Open windows</string>
+    <string name="hscroll">Scroll sideways</string>
+    <string name="touch_mode">How touch behaves</string>
+    <string name="mode_pan">✋ Pan</string>
+    <string name="mode_mouse">🖱 Mouse</string>
+    <string name="keyboard">Keyboard</string>
+    <string name="disconnect">Disconnect</string>
+    <string name="no_view">no view</string>
+    <string name="err_unauthorized">Not authorized: %1$s</string>
+    <string name="err_blocked">An approver blocked this device; unblock it in the vault.</string>
+    <string name="err_no_desktop">That machine has no desktop session open.</string>
+    <string name="err_no_a11y">That machine has no desktop accessibility service (at-spi2-core).</string>
+    <string name="err_no_raise">That machine does not let windows be brought to the front from here: you see it, but another may cover it.</string>
+    <string name="err_window_gone">That window is no longer open.</string>
+    <string name="err_no_video">That machine cannot send the picture of this window (it lacks ffmpeg, or uses Wayland).</string>
+    <string name="err_old_agent">That machine runs an older version of the remote desktop: update it to see the picture of windows and bring them to the front.</string>
+    <string name="err_video_decode">This phone could not show the picture of that window.</string>
+    <string name="video_wait">The picture of this window only travels over a direct connection between your devices. Waiting for it to open…</string>
+    <string name="video_loading">Loading picture…</string>
+    <string name="video_low">Reduced picture: your devices are not connected directly, so it uses less data.</string>
+    <string name="error">Error: %1$s</string>
+    <string name="link_connecting">Connecting…</string>
+    <string name="link_offline">No connection. Retrying…</string>
+    <string name="boot_no_identity_app">Your Dotrino profile lives in the “Dotrino Identity” app. Install it and come back here.</string>
+    <string name="boot_no_profile">This phone has no Dotrino profile yet. Create one right here or adopt one you already have.</string>
+    <string name="boot_no_vault">This profile is not connected to a vault. Connect it to see your desktops.</string>
+    <string name="boot_connect_vault">Connect my vault</string>
+    <string name="boot_create">Create profile</string>
+    <string name="boot_adopt">Adopt a profile</string>
+    <string name="boot_retry">Retry</string>
+    <string name="code_needed">%1$s asks for its code.</string>
+    <string name="code_label">Machine code</string>
+    <string name="code_send">Enter</string>
+    <string name="code_bad">Wrong code.</string>
+    <string name="code_wait">Too many tries: wait %1$d s.</string>
+    <string name="err_missing_cap">This device lacks the «desktop» permission. Grant it in your vault: dotrino-vault caps %1$s +desktop</string>
+</resources>

@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- «Cool & Cozy» claro, el de la PWA (@dotrino/theme, tokens dt-*). El oscuro, en values-night:
+     claro u oscuro lo decide el sistema, como en la web. -->
+<resources>
+    <color name="rd_bg">#F7FAFC</color>            <!-- dt-bg -->
+    <color name="rd_bg2">#F1F4F6</color>           <!-- dt-bg-2 -->
+    <color name="rd_surface">#FFFFFF</color>       <!-- dt-surface -->
+    <color name="rd_surface2">#F1F4F6</color>      <!-- dt-surface-2 -->
+    <color name="rd_surface3">#E9EEF1</color>      <!-- dt-surface-3 -->
+    <color name="rd_line">#BFC8CF</color>          <!-- dt-line -->
+    <color name="rd_text">#181C1E</color>          <!-- dt-text -->
+    <color name="rd_text_dim">#3F484E</color>      <!-- dt-text-dim -->
+    <color name="rd_text_faint">#70787F</color>    <!-- dt-text-faint -->
+    <color name="rd_accent">#00658C</color>        <!-- dt-accent -->
+    <color name="rd_accent_ink">#FFFFFF</color>    <!-- dt-accent-ink -->
+    <color name="rd_accent_soft">#D4ECFA</color>   <!-- dt-accent-soft -->
+    <color name="rd_accent_soft_ink">#004E6E</color>
+    <color name="rd_ok">#006B5C</color>            <!-- dt-mint -->
+    <color name="rd_error">#BA1A1A</color>         <!-- dt-error -->
+    <!-- Los componentes del ecosistema (dotrino-native) con la misma paleta. -->
+    <color name="dotrino_bg">#F7FAFC</color>
+    <color name="dotrino_card">#FFFFFF</color>
+    <color name="dotrino_fg">#181C1E</color>
+    <color name="dotrino_muted">#3F484E</color>
+    <color name="dotrino_accent">#00658C</color>
+</resources>

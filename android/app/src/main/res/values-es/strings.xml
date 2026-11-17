@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Español neutro, tuteo (CONVENCIONES §9). Mismo texto que la PWA (src/main.js). -->
+<resources>
+    <string name="app_name">Escritorio remoto</string>
+    <string name="brand">Escritorio remoto</string>
+    <string name="machines_title">Tus escritorios</string>
+    <string name="machines_loading">Buscando tus escritorios…</string>
+    <string name="machines_none">Ninguna de tus máquinas tiene el escritorio remoto encendido.</string>
+    <string name="machines_err">No se pudo consultar tu bóveda (¿está encendida?). %1$s</string>
+    <string name="machines_refresh">Buscar de nuevo</string>
+    <string name="machines_howto">Cómo ponerlo en marcha</string>
+    <string name="machine_online">En línea</string>
+    <string name="connecting">Conectando con %1$s…</string>
+    <string name="conn_fail">No se pudo conectar con %1$s.</string>
+    <string name="reconnecting">No llega nada de %1$s: conectando otra vez…</string>
+    <string name="active_short">Activa</string>
+    <string name="all_short">Todo</string>
+    <string name="screen">Pantalla</string>
+    <string name="screen_n">Pantalla %1$d</string>
+    <string name="taskbar">Ventanas abiertas</string>
+    <string name="hscroll">Desplazar a los lados</string>
+    <string name="touch_mode">Cómo responde el toque</string>
+    <string name="mode_pan">✋ Mover</string>
+    <string name="mode_mouse">🖱 Ratón</string>
+    <string name="keyboard">Teclado</string>
+    <string name="disconnect">Desconectar</string>
+    <string name="no_view">sin vista</string>
+    <string name="err_unauthorized">No autorizado: %1$s</string>
+    <string name="err_blocked">Un aprobador bloqueó este aparato; se desbloquea en la bóveda.</string>
+    <string name="err_no_desktop">Esa máquina no tiene una sesión de escritorio abierta.</string>
+    <string name="err_no_a11y">Esa máquina no tiene el servicio de accesibilidad del escritorio (at-spi2-core).</string>
+    <string name="err_no_raise">Esa máquina no deja traer ventanas al frente desde aquí: la ves, pero puede estar tapada por otra.</string>
+    <string name="err_window_gone">Esa ventana ya no está abierta.</string>
+    <string name="err_no_video">Esa máquina no puede enviar la imagen de esta ventana (le falta ffmpeg, o usa Wayland).</string>
+    <string name="err_old_agent">Esa máquina tiene una versión anterior del escritorio remoto: actualízala para ver la imagen de las ventanas y traerlas al frente.</string>
+    <string name="err_video_decode">Este teléfono no pudo mostrar la imagen de esa ventana.</string>
+    <string name="video_wait">La imagen de esta ventana solo viaja por conexión directa entre tus aparatos. Esperando a que se abra…</string>
+    <string name="video_loading">Cargando imagen…</string>
+    <string name="video_low">Imagen reducida: tus aparatos no están conectados directamente, y así gasta menos.</string>
+    <string name="error">Error: %1$s</string>
+    <string name="link_connecting">Conectando…</string>
+    <string name="link_offline">Sin conexión. Reintentando…</string>
+    <string name="boot_no_identity_app">Tu perfil de Dotrino vive en la app «Identidad Dotrino». Instálala y vuelve aquí.</string>
+    <string name="boot_no_profile">Este teléfono todavía no tiene un perfil de Dotrino. Créalo aquí mismo o adopta uno que ya tengas.</string>
+    <string name="boot_no_vault">Este perfil no está conectado a una bóveda. Conéctalo para ver tus escritorios.</string>
+    <string name="boot_connect_vault">Conectar mi bóveda</string>
+    <string name="boot_create">Crear perfil</string>
+    <string name="boot_adopt">Adoptar un perfil</string>
+    <string name="boot_retry">Reintentar</string>
+    <string name="code_needed">%1$s pide su clave.</string>
+    <string name="code_label">Clave de la máquina</string>
+    <string name="code_send">Entrar</string>
+    <string name="code_bad">Clave incorrecta.</string>
+    <string name="code_wait">Demasiados intentos: espera %1$d s.</string>
+    <string name="err_missing_cap">Este aparato no tiene el permiso «desktop». Dáselo en tu bóveda: dotrino-vault caps %1$s +desktop</string>
+</resources>

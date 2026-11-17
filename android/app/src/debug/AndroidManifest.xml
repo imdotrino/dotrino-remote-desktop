@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <!-- SOLO en depuración: el escritorio dibujando la escena de muestra de la PWA (src/demo.js),
+             sin perfil ni red. adb shell am start -n com.dotrino.remotedesktop/.DemoActivity -->
+        <activity android:name=".DemoActivity" android:exported="true"
+            android:windowSoftInputMode="adjustResize|stateHidden"
+            android:configChanges="orientation|screenSize|screenLayout|keyboard|keyboardHidden|smallestScreenSize" />
+    </application>
+</manifest>
