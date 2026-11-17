@@ -60,8 +60,6 @@ a { color: var(--dt-accent); text-underline-offset: 3px; }
 .hscroll[hidden] { display: none; }
 .hscroll::-webkit-slider-thumb { -webkit-appearance: none; width: 64px; height: 24px; border-radius: var(--dt-radius-pill); background: var(--dt-accent); border: none; cursor: grab; }
 .hscroll::-moz-range-thumb { width: 64px; height: 24px; border-radius: var(--dt-radius-pill); background: var(--dt-accent); border: none; cursor: grab; }
-.pick { display: inline-flex; align-items: center; gap: 6px; flex: 1; min-width: 0; color: var(--dt-text-dim); font-size: 14px; }
-.pick select { font: inherit; color: var(--dt-text); background: var(--dt-surface); border: 1px solid var(--dt-line); border-radius: var(--dt-radius-pill); padding: 7px 12px; min-width: 0; flex: 1; max-width: 360px; text-overflow: ellipsis; }
 #hard-reload { padding: 6px 12px; font-size: 16px; line-height: 1; }
 /* El interruptor de modo del toque: los dos siempre a la vista, el activo resaltado. */
 .seg { display: inline-flex; border: 1px solid var(--dt-line); border-radius: var(--dt-radius-pill); overflow: hidden; }
@@ -70,3 +68,11 @@ a { color: var(--dt-accent); text-underline-offset: 3px; }
 /* El puntero del modo ratón: siempre del mismo tamaño en el aparato (main.js lo escala). */
 .cursor path { fill: #fff; stroke: #000; stroke-width: 1.5; stroke-linejoin: round; }
 .cursor { pointer-events: none; }
+
+.dbar-fill { flex: 1; }
+/* La barra de tareas: una fila fina abajo que se desliza de lado, sin barra de desplazamiento. */
+.taskbar { display: flex; gap: 6px; overflow-x: auto; padding: 8px 0 calc(4px + env(safe-area-inset-bottom)); scrollbar-width: none; }
+.taskbar::-webkit-scrollbar { display: none; }
+.task { flex-shrink: 0; font: inherit; font-size: 13px; max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 6px 12px; border-radius: var(--dt-radius-pill); border: 1px solid var(--dt-line); background: var(--dt-surface); color: var(--dt-text); cursor: pointer; }
+.task.fixed { font-weight: 600; }
+.task.on { background: var(--dt-accent); color: var(--dt-accent-ink); border-color: var(--dt-accent); }

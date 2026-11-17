@@ -60,7 +60,9 @@ const M = {
     conn_fail: (n) => `No se pudo conectar con ${n}.`,
     all_screen: 'Todo el escritorio',
     active_win: 'Ventana activa',
-    view: 'Ver',
+    active_short: 'Activa',
+    all_short: 'Todo',
+    taskbar: 'Ventanas abiertas',
     hscroll: 'Desplazar a los lados',
     touch_mode: 'Cómo responde el toque',
     mode_pan: 'Mover',
@@ -104,7 +106,9 @@ const M = {
     conn_fail: (n) => `Could not connect to ${n}.`,
     all_screen: 'Whole desktop',
     active_win: 'Active window',
-    view: 'View',
+    active_short: 'Active',
+    all_short: 'All',
+    taskbar: 'Open windows',
     hscroll: 'Scroll sideways',
     touch_mode: 'How touch behaves',
     mode_pan: 'Pan',
@@ -284,7 +288,7 @@ function desktopScreen (link, sub, name = '') {
   const demo = sub === 'demo'
   const node = el(`<section class="desktop" data-testid="desktop">
     <div class="dbar">
-      <label class="pick"><span>${t('view')}</span><select data-testid="view-picker"></select></label>
+      <span class="dbar-fill"></span>
       <span class="seg" role="group" aria-label="${t('touch_mode')}"><button class="btn" data-mode="pan" data-testid="mode-pan">✋ ${t('mode_pan')}</button><button class="btn" data-mode="mouse" data-testid="mode-mouse">🖱 ${t('mode_mouse')}</button></span>
       <button class="btn" data-testid="keyboard">${t('keyboard')}</button>
       ${demo ? '' : `<button class="btn" data-testid="disconnect">${t('disconnect')}</button>`}
@@ -292,6 +296,7 @@ function desktopScreen (link, sub, name = '') {
     <p class="status" data-testid="desktop-status">${demo ? t('demo_note') : t('connecting', esc(name))}</p>
     <div class="stage"><svg class="screen" data-testid="screen" preserveAspectRatio="xMidYMin meet"></svg></div>
     <input class="hscroll" type="range" min="0" max="1000" value="0" data-testid="hscroll" aria-label="${t('hscroll')}" hidden>
+    <nav class="taskbar" data-testid="taskbar" aria-label="${t('taskbar')}"></nav>
     <textarea class="keys" data-testid="keys" autocapitalize="off" autocomplete="off" spellcheck="false" aria-label="${t('keyboard')}"></textarea>
   </section>`)
   const svg = /** @type {SVGSVGElement} */ ($(node, 'svg'))
@@ -370,25 +375,32 @@ function desktopScreen (link, sub, name = '') {
   }
 
   /**
-   * QUÉ VER, en UN desplegable: la ventana activa, todo el escritorio o una ventana. Antes eran
-   * botones, uno por ventana, y con 26 ventanas abiertas la fila no se entendía (dueño, 2026-11-16).
+   * QUÉ VER: la BARRA DE TAREAS de abajo, un botón por ventana, más «Activa» y «Todo» (dueño,
+   * 2026-11-16: «como un taskbar virtual, abajo, sin nada que moleste»). Una fila fina que se
+   * desliza de lado; el botón de lo que se mira, resaltado. Sustituye al desplegable de arriba.
    */
-  const picker = /** @type {HTMLSelectElement} */ ($(node, '[data-testid=view-picker]'))
-  picker.addEventListener('change', () => {
-    const v = picker.value
-    watch = v === 'active' || v === 'all' ? v : Number(v)
+  const taskbar = $(node, '.taskbar')
+  /** @param {'active' | 'all' | number} what */
+  const pick = (what) => {
+    watch = what
     follow()
+    showWins()
     // Elegir una ventana es querer trabajar en ella: se trae al frente, con el foco, en la máquina.
     if (typeof watch === 'number') send({ type: 'raise', id: watch })
-  })
+  }
   function showWins () {
     if (!scene) return
-    /** @param {string} value @param {string} label */
-    const opt = (value, label) => { const o = document.createElement('option'); o.value = value; o.textContent = label; return o }
-    const opts = [opt('active', t('active_win')), opt('all', t('all_screen'))]
-    for (const w of scene.wins) if (w.name && rectOf(w.id)) opts.push(opt(String(w.id), w.name))
-    picker.replaceChildren(...opts)
-    picker.value = String(watch)
+    const activeId = scene.wins.find((w) => w.active)?.id
+    /** @param {string} label @param {'active' | 'all' | number} what @param {string} [cls] */
+    const btn = (label, what, cls = '') => {
+      const on = watch === what || (watch === 'active' && what === activeId)
+      const b = el(`<button class="task${on ? ' on' : ''}${cls}" data-testid="task" title="${esc(label)}">${esc(label)}</button>`)
+      b.addEventListener('click', () => pick(what))
+      return b
+    }
+    const items = [btn(t('active_short'), 'active', ' fixed'), btn(t('all_short'), 'all', ' fixed')]
+    for (const w of scene.wins) if (w.name && rectOf(w.id)) items.push(btn(w.name, w.id))
+    taskbar.replaceChildren(...items)
   }
 
   // ZOOM: el SVG se hace más ancho que la pantalla y el escenario se desplaza con el dedo
@@ -407,7 +419,15 @@ function desktopScreen (link, sub, name = '') {
   }
   hscroll.addEventListener('input', () => { stage.scrollLeft = Number(hscroll.value) / 1000 * (stage.scrollWidth - stage.clientWidth) })
   stage.addEventListener('scroll', syncBar, { passive: true })
-  new ResizeObserver(syncBar).observe(stage)
+  // Girar la tableta (o cambiar el tamaño de la ventana) deja el encuadre en un sitio que ya no
+  // corresponde: si cambia el ancho, se vuelve a encuadrar lo que se mira.
+  let lastW = 0
+  new ResizeObserver(() => {
+    syncBar()
+    const w = stage.clientWidth
+    if (lastW && Math.abs(w - lastW) > 40) fitTo(rectOf(targetId() ?? undefined))
+    lastW = w
+  }).observe(stage)
   /**
    * Cambia el zoom dejando quieto, bajo el dedo, el punto `cx,cy` (coordenadas del navegador):
    * lo que se pellizca se queda donde estaba, en vez de irse a la esquina.
