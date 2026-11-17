@@ -61,9 +61,10 @@ const M = {
     all_screen: 'Todo el escritorio',
     active_win: 'Ventana activa',
     view: 'Ver',
-    zoom_in: 'Acercar',
-    zoom_out: 'Alejar',
     hscroll: 'Desplazar a los lados',
+    touch_mode: 'Cómo responde el toque',
+    mode_pan: 'Mover',
+    mode_mouse: 'Ratón',
     keyboard: 'Teclado',
     no_view: 'sin vista',
     disconnect: 'Desconectar',
@@ -104,9 +105,10 @@ const M = {
     all_screen: 'Whole desktop',
     active_win: 'Active window',
     view: 'View',
-    zoom_in: 'Zoom in',
-    zoom_out: 'Zoom out',
     hscroll: 'Scroll sideways',
+    touch_mode: 'How touch behaves',
+    mode_pan: 'Pan',
+    mode_mouse: 'Mouse',
     keyboard: 'Keyboard',
     no_view: 'no view',
     disconnect: 'Disconnect',
@@ -283,7 +285,7 @@ function desktopScreen (link, sub, name = '') {
   const node = el(`<section class="desktop" data-testid="desktop">
     <div class="dbar">
       <label class="pick"><span>${t('view')}</span><select data-testid="view-picker"></select></label>
-      <span class="zoom"><button class="btn" data-testid="zoom-out" aria-label="${t('zoom_out')}">−</button><span data-testid="zoom-level">1×</span><button class="btn" data-testid="zoom-in" aria-label="${t('zoom_in')}">+</button></span>
+      <span class="seg" role="group" aria-label="${t('touch_mode')}"><button class="btn" data-mode="pan" data-testid="mode-pan">✋ ${t('mode_pan')}</button><button class="btn" data-mode="mouse" data-testid="mode-mouse">🖱 ${t('mode_mouse')}</button></span>
       <button class="btn" data-testid="keyboard">${t('keyboard')}</button>
       ${demo ? '' : `<button class="btn" data-testid="disconnect">${t('disconnect')}</button>`}
     </div>
@@ -422,10 +424,9 @@ function desktopScreen (link, sub, name = '') {
     zoom = nz
     svg.style.width = `${zoom * 100}%`
     stage.scrollLeft = left; stage.scrollTop = top
-    $(node, '[data-testid=zoom-level]').textContent = `${zoom.toFixed(1).replace(/\.0$/, '')}×`
     requestAnimationFrame(syncBar)
+    placeCursor()
   }
-  $(node, '[data-testid=zoom-in]').addEventListener('click', () => setZoom(zoom * 1.5))
 
   /**
    * Encuadra una ventana: el zoom justo para que entre entera en la pantalla, centrada. El lienzo
@@ -439,12 +440,11 @@ function desktopScreen (link, sub, name = '') {
     const z = r ? Math.min(ZOOM_MAX, Math.max(1, Math.min(scene.screen.w / r.w, H / (r.h * s1)))) : 1
     zoom = z
     svg.style.width = `${zoom * 100}%`
-    $(node, '[data-testid=zoom-level]').textContent = `${zoom.toFixed(1).replace(/\.0$/, '')}×`
     stage.scrollLeft = r ? r.x * s1 * z - (W - r.w * s1 * z) / 2 : 0
     stage.scrollTop = r ? r.y * s1 * z - (H - r.h * s1 * z) / 2 : 0
     requestAnimationFrame(syncBar)
+    placeCursor()
   }
-  $(node, '[data-testid=zoom-out]').addEventListener('click', () => setZoom(zoom / 1.5))
 
   // PELLIZCO CON DOS DEDOS (dueño, 2026-11-16). Un dedo desplaza (scroll nativo del escenario);
   // dos, hacen zoom alrededor del punto medio. El navegador no hace su propio zoom de página
@@ -455,9 +455,11 @@ function desktopScreen (link, sub, name = '') {
   /** @param {TouchList} t */
   const spread = (t) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY)
   stage.addEventListener('touchstart', (e) => {
+    if (touchMode !== 'pan') return
     if (e.touches.length === 2) { pinch = { d0: spread(e.touches), z0: zoom }; pinched = true }
   }, { passive: true })
   stage.addEventListener('touchmove', (e) => {
+    if (touchMode !== 'pan') return
     if (!pinch || e.touches.length !== 2) return
     e.preventDefault()
     const t = e.touches
@@ -467,6 +469,135 @@ function desktopScreen (link, sub, name = '') {
     if (e.touches.length < 2) pinch = null
     if (e.touches.length === 0) setTimeout(() => { pinched = false }, 0)
   }, { passive: true })
+
+  // ---------- MODO RATÓN (dueño, 2026-11-16): el toque como un touchpad ----------
+  // Un dedo mueve el puntero (por desplazamiento, no hace falta tocar encima) y la vista lo
+  // sigue; tocar con un segundo dedo es clic donde está el puntero, y dejarlo apoyado mantiene
+  // el botón pulsado para arrastrar. Separar los dos dedos sigue siendo zoom.
+  const TOUCH_KEY = 'dotrino-remote-desktop:touch'
+  /** @type {'pan' | 'mouse'} */
+  let touchMode = 'pan'
+  try { if (localStorage.getItem(TOUCH_KEY) === 'mouse') touchMode = 'mouse' } catch {}
+  /** Lo que el dedo mueve el puntero, por píxel de pantalla del aparato. */
+  const GAIN = 1.6
+  const HOLD_MS = 350
+  const cursor = { x: 0, y: 0, placed: false }
+  const cursorG = /** @type {SVGGElement} */ (document.createElementNS('http://www.w3.org/2000/svg', 'g'))
+  cursorG.setAttribute('class', 'cursor')
+  cursorG.innerHTML = '<path d="M0 0 L0 22 L6 16 L10 26 L14 24 L10 14 L18 14 Z"/>'
+  svg.appendChild(cursorG)
+  /** Píxeles del aparato por píxel de la pantalla de la máquina. */
+  const scaleNow = () => scene ? (stage.clientWidth / Math.max(1, scene.screen.w)) * zoom : 1
+  function placeCursor () {
+    cursorG.setAttribute('transform', `translate(${cursor.x} ${cursor.y}) scale(${1 / scaleNow()})`)
+  }
+  /** La vista sigue al puntero: si se acerca al borde, se desplaza. */
+  const keepVisible = () => {
+    const k = scaleNow(); const m = 60
+    const cx = cursor.x * k; const cy = cursor.y * k
+    if (cx < stage.scrollLeft + m) stage.scrollLeft = cx - m
+    else if (cx > stage.scrollLeft + stage.clientWidth - m) stage.scrollLeft = cx - stage.clientWidth + m
+    if (cy < stage.scrollTop + m) stage.scrollTop = cy - m
+    else if (cy > stage.scrollTop + stage.clientHeight - m) stage.scrollTop = cy - stage.clientHeight + m
+  }
+  let lastMoveAt = 0
+  /** @type {ReturnType<typeof setTimeout> | null} */
+  let moveTimer = null
+  /** Mover el ratón de la máquina, como mucho ~30 veces por segundo (y siempre el último sitio). */
+  const sendMove = () => {
+    const now = Date.now()
+    const go = () => { lastMoveAt = Date.now(); moveTimer = null; send({ type: 'move', x: Math.round(cursor.x), y: Math.round(cursor.y) }) }
+    if (now - lastMoveAt >= 33) go()
+    else if (!moveTimer) moveTimer = setTimeout(go, 33 - (now - lastMoveAt))
+  }
+  /** El puntero, al entrar en este modo, en el centro de lo que se ve. */
+  const centerCursor = () => {
+    if (!scene) return
+    const k = scaleNow()
+    cursor.x = Math.min(scene.screen.w - 1, (stage.scrollLeft + stage.clientWidth / 2) / k)
+    cursor.y = Math.min(scene.screen.h - 1, (stage.scrollTop + stage.clientHeight / 2) / k)
+    cursor.placed = true
+  }
+  function applyTouchMode () {
+    stage.style.touchAction = touchMode === 'mouse' ? 'none' : ''
+    cursorG.style.display = touchMode === 'mouse' ? '' : 'none'
+    for (const b of node.querySelectorAll('[data-mode]')) {
+      const on = /** @type {HTMLElement} */ (b).dataset.mode === touchMode
+      b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on))
+    }
+    if (touchMode === 'mouse') { if (!cursor.placed) centerCursor(); placeCursor() }
+  }
+  for (const b of node.querySelectorAll('[data-mode]')) {
+    b.addEventListener('click', () => {
+      touchMode = /** @type {HTMLElement} */ (b).dataset.mode === 'mouse' ? 'mouse' : 'pan'
+      try { localStorage.setItem(TOUCH_KEY, touchMode) } catch {}
+      applyTouchMode()
+    })
+  }
+  /** @type {{ id: number, x: number, y: number } | null} el dedo que mueve */
+  let finger = null
+  /** @type {{ id: number, at: number, d0: number, z0: number, zooming: boolean, holding: boolean, timer: ReturnType<typeof setTimeout> | null } | null} el segundo dedo */
+  let second = null
+  /** @param {TouchList} list @param {number} id */
+  const touchById = (list, id) => { for (const t of list) if (t.identifier === id) return t; return null }
+  stage.addEventListener('touchstart', (e) => {
+    if (touchMode !== 'mouse') return
+    e.preventDefault()
+    if (!cursor.placed) centerCursor()
+    if (!finger && e.touches.length >= 1) { const t = e.touches[0]; finger = { id: t.identifier, x: t.clientX, y: t.clientY } }
+    if (e.touches.length === 2 && !second) {
+      const t2 = [...e.touches].find((t) => t.identifier !== finger?.id)
+      if (!t2) return
+      const s2 = { id: t2.identifier, at: Date.now(), d0: spread(e.touches), z0: zoom, zooming: false, holding: false, timer: /** @type {ReturnType<typeof setTimeout> | null} */ (null) }
+      s2.timer = setTimeout(() => {
+        if (second !== s2 || s2.zooming) return
+        s2.holding = true
+        send({ type: 'press', x: Math.round(cursor.x), y: Math.round(cursor.y), button: 1 })
+      }, HOLD_MS)
+      second = s2
+    }
+  }, { passive: false })
+  stage.addEventListener('touchmove', (e) => {
+    if (touchMode !== 'mouse') return
+    e.preventDefault()
+    // Dos dedos que se separan o se juntan: zoom, como en el otro modo.
+    if (second && e.touches.length === 2 && !second.holding) {
+      const d = spread(e.touches)
+      if (second.zooming || Math.abs(d - second.d0) > 24) {
+        second.zooming = true
+        const t = e.touches
+        setZoom(second.z0 * d / second.d0, (t[0].clientX + t[1].clientX) / 2, (t[0].clientY + t[1].clientY) / 2)
+        return
+      }
+    }
+    if (!finger || !scene) return
+    const t = touchById(e.touches, finger.id)
+    if (!t) return
+    const k = scaleNow()
+    cursor.x = Math.max(0, Math.min(scene.screen.w - 1, cursor.x + (t.clientX - finger.x) * GAIN / k))
+    cursor.y = Math.max(0, Math.min(scene.screen.h - 1, cursor.y + (t.clientY - finger.y) * GAIN / k))
+    finger.x = t.clientX; finger.y = t.clientY
+    placeCursor(); keepVisible(); sendMove()
+  }, { passive: false })
+  stage.addEventListener('touchend', (e) => {
+    if (touchMode !== 'mouse') return
+    e.preventDefault()
+    const at = { x: Math.round(cursor.x), y: Math.round(cursor.y) }
+    if (second && !touchById(e.touches, second.id)) {
+      if (second.timer) clearTimeout(second.timer)
+      if (second.holding) send({ type: 'release', ...at, button: 1 })
+      else if (!second.zooming && Date.now() - second.at < HOLD_MS) send({ type: 'click', ...at, button: 1 })
+      second = null
+      keys.focus({ preventScroll: true })
+    }
+    if (finger && !touchById(e.touches, finger.id)) {
+      // El dedo que movía se levantó: el que quede (si queda) pasa a mover.
+      const t = e.touches[0]
+      finger = t ? { id: t.identifier, x: t.clientX, y: t.clientY } : null
+      if (t && second && second.id === t.identifier) { if (second.timer) clearTimeout(second.timer); if (second.holding) send({ type: 'release', ...at, button: 1 }); second = null }
+    }
+  }, { passive: false })
+  applyTouchMode()
 
   /** @param {Scene} s @param {Set<number> | null} [changed] @param {boolean} [reordered] */
   function paint (s, changed = null, reordered = true) {
@@ -494,7 +625,7 @@ function desktopScreen (link, sub, name = '') {
     const moved = Math.abs(p.x - down.x) + Math.abs(p.y - down.y) > 6
     if (e.pointerType === 'mouse') { if (e.button === 0) send({ type: 'release', ...p, button: 1 }) }
     // Táctil: un toque es un clic donde se tocó; arrastrar no hace nada (se desplaza la vista).
-    else if (!moved && !pinched) send({ type: 'click', ...p, button: 1 })
+    else if (!moved && !pinched && touchMode === 'pan') send({ type: 'click', ...p, button: 1 })
     down = null
     keys.focus({ preventScroll: true })
   })
@@ -503,6 +634,8 @@ function desktopScreen (link, sub, name = '') {
   svg.addEventListener('wheel', (e) => {
     if (!e.deltaY) return
     e.preventDefault()
+    // Ctrl + rueda: zoom de la vista, como en el navegador (sin pantalla táctil no hay pellizco).
+    if (e.ctrlKey) { setZoom(zoom * (e.deltaY < 0 ? 1.15 : 1 / 1.15), e.clientX, e.clientY); return }
     const p = view.toScreen(e.clientX, e.clientY)
     if (p) send({ type: 'wheel', ...p, dy: Math.sign(e.deltaY) * Math.max(1, Math.round(Math.abs(e.deltaY) / 60)) })
   }, { passive: false })

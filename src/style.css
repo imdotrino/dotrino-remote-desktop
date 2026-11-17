@@ -55,9 +55,6 @@ a { color: var(--dt-accent); text-underline-offset: 3px; }
 .n.selected > text { fill: var(--dt-accent-soft-ink); }
 .n.focused > rect { stroke: var(--dt-accent); stroke-width: 2; }
 .n.off > text { opacity: .5; }
-.zoom { display: inline-flex; align-items: center; gap: 4px; }
-.zoom .btn { padding: 6px 12px; }
-.zoom [data-testid=zoom-level] { min-width: 2.2em; text-align: center; color: var(--dt-text-dim); font-size: 13px; }
 /* La barra de abajo: gruesa a propósito, para el dedo. */
 .hscroll { -webkit-appearance: none; appearance: none; width: 100%; height: 32px; margin: 8px 0 0; background: var(--dt-surface-2); border: 1px solid var(--dt-line); border-radius: var(--dt-radius-pill); padding: 0 4px; }
 .hscroll[hidden] { display: none; }
@@ -66,3 +63,10 @@ a { color: var(--dt-accent); text-underline-offset: 3px; }
 .pick { display: inline-flex; align-items: center; gap: 6px; flex: 1; min-width: 0; color: var(--dt-text-dim); font-size: 14px; }
 .pick select { font: inherit; color: var(--dt-text); background: var(--dt-surface); border: 1px solid var(--dt-line); border-radius: var(--dt-radius-pill); padding: 7px 12px; min-width: 0; flex: 1; max-width: 360px; text-overflow: ellipsis; }
 #hard-reload { padding: 6px 12px; font-size: 16px; line-height: 1; }
+/* El interruptor de modo del toque: los dos siempre a la vista, el activo resaltado. */
+.seg { display: inline-flex; border: 1px solid var(--dt-line); border-radius: var(--dt-radius-pill); overflow: hidden; }
+.seg .btn { border: none; border-radius: 0; padding: 6px 12px; background: var(--dt-surface); }
+.seg .btn.on { background: var(--dt-accent); color: var(--dt-accent-ink); }
+/* El puntero del modo ratón: siempre del mismo tamaño en el aparato (main.js lo escala). */
+.cursor path { fill: #fff; stroke: #000; stroke-width: 1.5; stroke-linejoin: round; }
+.cursor { pointer-events: none; }
