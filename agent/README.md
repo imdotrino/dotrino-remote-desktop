@@ -21,6 +21,10 @@ dotrino-remote-desktop-agent service install   # arranca solo al iniciar tu sesi
 supervisor que lo vuelve a levantar si se cae. No es una unidad de systemd: el agente necesita la
 sesión gráfica, y lo que arranca al encender no la tiene. `service status` y `service uninstall`.
 
+Las ventanas de esta máquina (la app de escritorio) le hablan por un socket local
+(`remote-desktop.sock` en la carpeta del enlace, solo del usuario), y el agente entra por ellas en
+tus otras máquinas con su propio enlace (≥ 0.7.0).
+
 Corre dentro de la sesión gráfica del usuario: necesita su bus de sesión y el de accesibilidad
 (`at-spi2-core`). Protocolo y diseño: [el repo](https://github.com/imdotrino/dotrino-remote-desktop).
 

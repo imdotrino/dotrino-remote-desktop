@@ -32,9 +32,23 @@
  *                                         `q`: 'direct' (calidad completa) o 'relay' (reducido, por el proxio)
  *     { type:'fail', code, message }
  *
- * Quién puede: cualquier aparato de tu cuenta con `sign` en el acta, igual que la terminal
- * (lo juzga `remote-agent` en el saludo). Instalar este agente en una máquina es decir que su
- * escritorio se puede usar desde tus otros aparatos.
+ * Quién puede: un aparato de tu cuenta con `desktop` en el acta (lo juzga `remote-agent` en el
+ * saludo; sin él, `unauthorized` con `reason: 'missing-cap'`). Instalar este agente en una
+ * máquina es decir que su escritorio se puede usar desde tus otros aparatos.
+ *
+ * LAS VENTANAS DE ESTA MÁQUINA (la app de escritorio, desktop/) le hablan al agente por un
+ * socket local (`remote-desktop.sock` en la carpeta del enlace, `@dotrino/remote-agent/local`),
+ * en JSON por líneas, con el mismo protocolo. Además de lo de arriba, ahí hay (`serveLocal`):
+ *   ventana → agente:
+ *     { type:'machines' }                 las otras máquinas con el escritorio remoto encendido
+ *     { type:'via', machine }             a partir de aquí todo va a ESA máquina y vuelve (far.js)
+ *   agente → ventana:
+ *     { type:'hello', product, version }  lo primero que llega: quién atiende (§14)
+ *     { type:'machines', list:[{sub,id,name}] }
+ *     { type:'via', machine:{sub,id,name} }   el tubo está puesto
+ *     { type:'resumed' }                  la sesión con la otra máquina se rehízo: pedir la escena otra vez
+ *   Sin `via`, la ventana usa el escritorio de ESTA máquina, sin clave: quien abre el socket es el
+ *   mismo usuario que ya está sentado delante.
  */
 import { createRequire } from 'node:module'
 import { startRemoteAgent } from '@dotrino/remote-agent/agent'
@@ -43,6 +57,8 @@ import { dataDir, loadLink, LABEL } from './link.js'
 import { makeDesktop } from './desktop.js'
 import { raiseWindow } from './raise.js'
 import { makeVideo, evenRect } from './video.js'
+import { listenLocal } from '@dotrino/remote-agent/local'
+import { makeFar } from './far.js'
 
 /** @typedef {Awaited<ReturnType<typeof startRemoteAgent>>} RemoteAgent */
 
@@ -51,6 +67,9 @@ const require = createRequire(import.meta.url)
 const { version: VERSION } = require('./package.json')
 
 export { LABEL, VERSION }
+
+/** El nombre del socket local (`<carpeta del enlace>/remote-desktop.sock`): lo busca desktop/. */
+export const LOCAL_SOCKET = 'remote-desktop'
 
 /** Cuánto dura sin mensajes una sesión: una pantalla quieta no manda nada. */
 export const SESSION_IDLE_MS = 60 * 60_000
@@ -235,6 +254,48 @@ export function serveSession (session, desktop, { log = () => {}, route = async 
 }
 
 /**
+ * Atiende una ventana de ESTA máquina (el socket local). `machines` y `via` son suyos; lo demás
+ * es el protocolo de siempre, contra el escritorio de esta máquina (`serveSession`, sin clave),
+ * hasta que pide `via`: desde ahí todo va a la otra máquina (far.js) y esta ya no atiende nada.
+ * Exportada para las pruebas.
+ * @param {SessionLike} session
+ * @param {ReturnType<typeof makeDesktop>} desktop
+ * @param {Pick<ReturnType<typeof makeFar>, 'list' | 'via'>} far
+ * @param {{ log?: (m: string) => void }} [opts]
+ */
+export function serveLocal (session, desktop, far, { log = () => {} } = {}) {
+  /** @type {'local' | 'far' | null} */
+  let mode = null
+  /** @type {Record<'message' | 'close', ((msg?: any) => void)[]>} */
+  const inner = { message: [], close: [] }
+  /** @param {'message' | 'close'} ev @param {any} [msg] */
+  const emit = (ev, msg) => { for (const cb of inner[ev]) { try { cb(msg) } catch (_) {} } }
+  /** La sesión que ven `serveSession` o `far.via`: solo lo que no es de este nivel. */
+  /** @type {SessionLike} */
+  const view = { device: null, send: (p) => session.send(p), on (ev, cb) { inner[ev].push(cb); return view } }
+  /** @param {unknown} e */
+  const failed = (e) => {
+    const err = /** @type {{ code?: string, message?: string }} */ (e)
+    session.send({ type: 'fail', code: err?.code || 'local-error', message: err?.message || String(e) })
+  }
+  session.send({ type: 'hello', product: LABEL, version: VERSION })
+  session.on('message', (raw) => {
+    if (!raw || typeof raw !== 'object') return
+    const msg = /** @type {Record<string, unknown>} */ (raw)
+    if (mode !== 'far' && msg.type === 'machines') { far.list().then((list) => session.send({ type: 'machines', list })).catch(failed); return }
+    if (mode === null && msg.type === 'via') {
+      mode = 'far'
+      far.via(view, msg.machine).catch((e) => { log(`local: via failed: ${/** @type {Error} */ (e).message}`); failed(e) })
+      return
+    }
+    if (mode === 'local' && msg.type === 'via') return failed(Object.assign(new Error('this window already uses this machine: open another connection'), { code: 'bad-input' }))
+    if (mode === null) { mode = 'local'; serveSession(view, desktop, { log, gate: null, route: async () => 'socket' }) }
+    emit('message', msg)
+  })
+  session.on('close', () => emit('close'))
+}
+
+/**
  * Arranca el agente: el escritorio (perezoso: no lee nada hasta que alguien mira) y la parte
  * remota. Sin enlace no arranca: este agente no tiene ventanas locales a las que atender, así
  * que sin bóveda no sirve para nada, y se dice.
@@ -266,6 +327,9 @@ export async function startAgent (opts = {}) {
         .catch((e) => log(`could not report the incident: ${e.message}`))
     }
   })
+  // Las ventanas de esta máquina: el socket local, y por él las otras máquinas (far.js).
+  const far = makeFar({ dir, loadLink: () => loadLink(dir), kind: LABEL, log })
+  const local = await listenLocal({ dir, name: LOCAL_SOCKET, serve: (session) => serveLocal(session, desktop, far, { log }) })
   const startRemote = () => startRemoteAgent({
     label: LABEL,
     // Solo quien tenga `desktop` en el acta usa el escritorio (auditoría del 2026-11-16): con
@@ -315,7 +379,8 @@ export async function startAgent (opts = {}) {
     get remote () { return remote },
     get machineId () { return remote?.machineId || null },
     desktop,
-    close: async () => { stopped = true; if (retry) clearInterval(retry); remote?.close(); await desktop.stop() }
+    localPath: local.path,
+    close: async () => { stopped = true; if (retry) clearInterval(retry); far.close(); local.close(); remote?.close(); await desktop.stop() }
   }
 }
 

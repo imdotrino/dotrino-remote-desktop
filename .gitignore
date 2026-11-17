@@ -2,3 +2,4 @@ node_modules/
 dist/
 .claude/
 agent/node_modules/
+desktop/target/

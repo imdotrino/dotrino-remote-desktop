@@ -60,6 +60,15 @@ hueco con su nombre.
 | cliente → máquina | `scene` · `leave` · `raise {id}` (traer la ventana al frente; X11 con `xdotool`) · `click {x,y,button?,double?}` · `press`/`release {x,y,button?}` · `move {x,y}` · `wheel {x,y,dy}` · `action {id,index?}` · `focus {id}` · `text {text}` · `key {keysym}` · `video {id\|null}` |
 | máquina → cliente | `scene {seq,screen,wins,nodes}` · `patch {seq,base,put,del,order?,screen?,wins?}` · `vframe {id,seq,key,rect,q,data}` · `fail {code,message}` |
 
+**Ventanas de esta máquina (socket local, agente ≥ 0.7.0).** La app de escritorio (`desktop/`) le
+habla al agente de su máquina por `remote-desktop.sock` en la carpeta del enlace (carpeta 0700,
+socket 0600; `@dotrino/remote-agent/local`), en JSON por líneas, con el mismo protocolo. Además:
+`machines` → `machines {list:[{sub,id,name}]}` (las otras máquinas con el agente encendido) y
+`via {machine}` → `via {machine}`: desde ahí todo va a esa máquina y vuelve, y el agente local
+entra en ella con su propio enlace (`agent/far.js`, sobre `@dotrino/remote-agent/far`). Lo primero
+que llega es `hello {product,version}`; `resumed` avisa de que la sesión con la otra máquina se
+rehízo. Sin `via`, la ventana usa el escritorio de esta máquina, sin clave.
+
 Un nodo: `{id, p (padre), r (rol), n (nombre), t (texto), x, y, w, h, s (estados en letras), a (acciones), hole?}`.
 Un `patch` cuyo `base` no es la escena del cliente se rechaza (`stale`) y el cliente pide la escena
 entera: no se pinta a medias. La lógica de diferencias (`agent/scene.js`) es la misma en las dos
@@ -71,7 +80,13 @@ puntas.
   enseña una escena de ejemplo sin red ni perfil.
 - **`agent/`** — `@dotrino/remote-desktop-agent` (Node, Linux): `atspi.js` lee el escritorio y
   genera ratón y teclado por AT-SPI; `desktop.js` relee solo las ventanas que cambian (eventos de
-  accesibilidad + la lista de ventanas cada segundo); `scene.js` las diferencias; `index.js` la sesión.
+  accesibilidad + la lista de ventanas cada segundo); `scene.js` las diferencias; `index.js` la sesión
+  y el socket local; `far.js` las otras máquinas para las ventanas de esta.
+- **`desktop/`** — la app de escritorio (Rust + iced, Linux; portable como la de Terminal): lista de
+  máquinas, la escena dibujada en un lienzo, barra de tareas, ratón y teclado, zoom, el vídeo de los
+  huecos (OpenH264) y la clave de la máquina. No sabe de llaves ni de red: todo pasa por el agente
+  local. `--name <n>` elige el agente si hay varios; `--this-machine` abre esta misma máquina solo
+  para ver (prueba).
 
 ## Desarrollo
 
@@ -81,6 +96,10 @@ npm run type-check
 
 cd agent && npm install && npm test  # el agente
 node bin/cli.js                      # enlaza (pide la invitación de `dotrino-vault pair`) y corre
+```
+
+```sh
+cd desktop && cargo test && cargo run --release   # la app de escritorio (necesita el agente ≥ 0.7.0 corriendo)
 ```
 
 El agente corre **dentro de la sesión gráfica** del usuario: necesita su bus de sesión y el de
