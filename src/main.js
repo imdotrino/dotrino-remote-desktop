@@ -347,7 +347,11 @@ function desktopScreen (link, sub, name = '') {
     const fitId = r ? id : null
     if (fitId !== lastFit) { lastFit = fitId; requestAnimationFrame(() => fitTo(r)) }
     chooseVideo(r ? id : null)
-    videoLayer.sync((x) => rectOf(x), () => true)
+    // Las imágenes guardadas van por encima de todo: con una ventana a la vista, solo las suyas.
+    // Si no, la imagen congelada de otra que está en el mismo sitio la tapaba (pasó con Slack
+    // encima de la terminal, dueño 2026-11-16).
+    const only = r ? id : null
+    videoLayer.sync((x) => rectOf(x), (x) => only == null || view.ownerOf(x) === only)
   }
 
   // ---------- el vídeo de los huecos (agent/video.js, src/video.js) ----------
