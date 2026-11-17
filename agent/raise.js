@@ -50,19 +50,37 @@ export async function raiseWindow ({ pid, title, session = process.env.XDG_SESSI
 }
 
 /**
- * La ventana activa DE VERDAD, según el gestor de ventanas: `{ pid, title }`, o `null` si no se
- * puede saber (Wayland, sin xdotool). La accesibilidad la informa mal: una app de Electron se
- * queda «activa» para siempre (visto el 2026-11-16 con dos ventanas activas a la vez).
+ * La ventana activa DE VERDAD, según el gestor de ventanas: `{ pid, title, window, x, y, w, h }`,
+ * o `null` si no se puede saber (Wayland, sin xdotool). La accesibilidad la informa mal: una app
+ * de Electron se queda «activa» para siempre (visto el 2026-11-16 con dos ventanas activas a la
+ * vez), y una app sin accesibilidad (la terminal de Dotrino, hecha con iced) ni siquiera sale.
+ * Con la posición, el agente puede enseñar esa ventana como un hueco con vídeo.
  * @param {{ session?: string, exec?: typeof run }} [o]
- * @returns {Promise<{ pid: number, title: string } | null>}
+ * @returns {Promise<{ pid: number, title: string, window: string, x: number, y: number, w: number, h: number } | null>}
  */
 export async function activeWindow ({ session = process.env.XDG_SESSION_TYPE || '', exec = run } = {}) {
   if (session === 'wayland') return null
+  let out
   try {
-    const [title = '', pid = ''] = (await exec('xdotool', ['getactivewindow', 'getwindowname', 'getwindowpid'])).split('\n')
-    return pid.trim() ? { pid: Number(pid.trim()), title: title.trim() } : null
+    out = await exec('xdotool', ['getactivewindow', 'getwindowname', 'getwindowpid', 'getwindowgeometry', '--shell'])
   } catch (_) {
     // Sin xdotool, o sin ventana activa (el escritorio): no se sabe, y se usa la accesibilidad.
     return null
   }
+  return parseActive(out)
+}
+
+/**
+ * Lee lo que contesta `xdotool getactivewindow getwindowname getwindowpid getwindowgeometry --shell`.
+ * @param {string} out
+ */
+export function parseActive (out) {
+  const lines = out.split('\n')
+  const title = (lines[0] || '').trim()
+  const pid = Number((lines[1] || '').trim())
+  /** @type {Record<string, string>} */
+  const kv = {}
+  for (const l of lines.slice(2)) { const m = /^([A-Z]+)=(.*)$/.exec(l.trim()); if (m) kv[m[1]] = m[2] }
+  if (!pid || !kv.WINDOW) return null
+  return { pid, title, window: kv.WINDOW, x: Number(kv.X), y: Number(kv.Y), w: Number(kv.WIDTH), h: Number(kv.HEIGHT) }
 }

@@ -37,3 +37,10 @@ test('sin xdotool: no-raise', async () => {
   const exec = async () => { throw Object.assign(new Error('spawn xdotool ENOENT'), { code: 'ENOENT' }) }
   await assert.rejects(() => raiseWindow({ pid: 5, title: 'x', session: 'x11', exec }), { code: 'no-raise' })
 })
+
+test('parseActive: título, proceso y sitio de la ventana activa', async () => {
+  const { parseActive } = await import('../raise.js')
+  assert.deepEqual(parseActive('Mi ventana\n417335\nWINDOW=146800644\nX=27\nY=73\nWIDTH=945\nHEIGHT=482\nSCREEN=0\n'),
+    { pid: 417335, title: 'Mi ventana', window: '146800644', x: 27, y: 73, w: 945, h: 482 })
+  assert.equal(parseActive('sin nada\n'), null)
+})

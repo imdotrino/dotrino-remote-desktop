@@ -46,6 +46,8 @@ export function makeDesktop (opts = {}) {
   const watchers = new Set()
   /** @type {Map<string, number>} el proceso de cada app, por su nombre en el bus */
   const pids = new Map()
+  /** @type {Map<number, number>} el proceso de cada ventana sin accesibilidad (por su id de nodo) */
+  const synthPids = new Map()
   /** @type {Set<string>} apps (su nombre en el bus) con algo nuevo */
   const dirtyApps = new Set()
   let fullDue = true
@@ -112,6 +114,8 @@ export function makeDesktop (opts = {}) {
     // Cuál está activa lo dice el gestor de ventanas si se le puede preguntar: la accesibilidad
     // la informa mal (una app de Electron se queda «activa» para siempre).
     const real = await activeWindow()
+    /** @type {Node | null} la ventana activa cuando no publica accesibilidad */
+    let synth = null
     if (real) {
       for (const w of wins) {
         let pid = pids.get(w.ref[0])
@@ -119,6 +123,13 @@ export function makeDesktop (opts = {}) {
         w.active = pid === real.pid && w.name === real.title
       }
       wins.sort((a, b) => Number(a.active) - Number(b.active))
+      // UNA APP SIN ACCESIBILIDAD (la terminal de Dotrino, un juego) no sale en la lista: si es
+      // la activa, se enseña igual, como un hueco entero con su sitio y su título. Lleva vídeo.
+      if (!wins.some((w) => w.active) && real.w > 0 && real.h > 0) {
+        const id = reader.idOf([':x11', `/window/${real.window}`])
+        synthPids.set(id, real.pid)
+        synth = { id, p: 0, r: 'frame', n: real.title, x: real.x, y: real.y, w: real.w, h: real.h, s: 'a', hole: 1 }
+      }
     }
     const full = fullDue
     fullDue = false
@@ -140,11 +151,13 @@ export function makeDesktop (opts = {}) {
     /** @type {Node[]} */
     const nodes = []
     for (const w of wins) { const p = perWin.get(w.id); if (p) nodes.push(...p.nodes) }
+    if (synth) nodes.push(synth)
     /** @type {Scene} */
     const next = {
       seq: scene.seq + 1,
       screen: screenOf(wins),
-      wins: wins.map((w) => ({ id: w.id, app: w.app, name: w.name, active: w.active })),
+      wins: [...wins.map((w) => ({ id: w.id, app: w.app, name: w.name, active: w.active })),
+        ...(synth ? [{ id: synth.id, app: synth.n || '', name: synth.n || '', active: true }] : [])],
       nodes
     }
     const patch = diff(scene, next)
@@ -185,6 +198,17 @@ export function makeDesktop (opts = {}) {
     get watching () { return watchers.size },
     /** La escena de ahora (la última leída). */
     get scene () { return scene },
+    /**
+     * El proceso de la app de un nodo: el de una ventana sin accesibilidad lo sabe el gestor de
+     * ventanas; el resto, el bus de accesibilidad.
+     * @param {number} id
+     */
+    async pidOf (id) {
+      const p = synthPids.get(id)
+      if (p != null) return p
+      if (!reader) throw Object.assign(new Error('nobody is watching'), { code: 'not-watching' })
+      return reader.pidOf(id)
+    },
     /** El lector, para actuar (clic, teclas). `null` si nadie mira. */
     get reader () { return reader },
     stop
