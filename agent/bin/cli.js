@@ -8,6 +8,9 @@
  *   dotrino-remote-desktop-agent info [--name <n>]     qué aparato es: su ID, su bóveda, sus permisos
  *   dotrino-remote-desktop-agent update [--name <n>] [--approval on|off] [--notify on|off]
  *                                                      cómo se actualiza (CONVENCIONES §15)
+ *   dotrino-remote-desktop-agent service install|uninstall|status [--name <n>]
+ *                                                      arrancar solo con tu sesión (service.js)
+ *   dotrino-remote-desktop-agent supervise --name <n>  lo lanza el inicio automático del escritorio
  *
  * Tiene que correr DENTRO de la sesión gráfica del usuario (necesita su bus de sesión y el de
  * accesibilidad): un servicio de usuario de systemd o el arranque automático del escritorio,
@@ -21,6 +24,10 @@ import { listInstances, lockInstance, instancesRoot } from '@dotrino/remote-agen
 import { deviceInfo, formatDeviceInfo } from '@dotrino/vault/device-info'
 import { updatePrefsCommand, updateStatusText } from '@dotrino/update/npm'
 import { startSelfUpdate } from '@dotrino/remote-agent/update'
+import { realpathSync, readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import path from 'node:path'
+import { service } from '../service.js'
 
 /** @type {{ version: string }} */
 const { version: VERSION } = createRequire(import.meta.url)('../package.json')
@@ -39,6 +46,10 @@ if (args.includes('-h') || args.includes('--help')) {
   dotrino-remote-desktop-agent update [--name <n>]   cómo se actualiza. Por defecto lo hace solo y avisa:
                                                        --approval on|off  pedir antes aprobación a tu bóveda
                                                        --notify on|off    avisar cuando se actualiza
+  dotrino-remote-desktop-agent service install [--name <n>]    arranca solo al iniciar tu sesión, y se
+                                                               vuelve a levantar si se cae
+  dotrino-remote-desktop-agent service uninstall [--name <n>]  lo quita (para el agente)
+  dotrino-remote-desktop-agent service status [--name <n>]     dice si está puesto y si está corriendo
   opciones: [--name <n>] [--proxy <wss://…>] [--dir <ruta>]
            [--no-a11y]  no encender la accesibilidad del escritorio al mirar
 
@@ -83,10 +94,59 @@ if (cmd === 'info') {
   process.exit(0)
 }
 
-if (cmd !== 'run' && cmd !== 'enroll') { console.error(`comando desconocido: ${cmd} (mira --help)`); process.exit(2) }
+// El CLI de verdad (no un enlace de npm): es lo que lanzan el servicio y el supervisor.
+const CLI = realpathSync(fileURLToPath(import.meta.url))
 
-try {
+// `supervise`: lo lanza el inicio automático del escritorio que pone `service install`.
+if (cmd === 'supervise') {
+  const name = opt('--name')
+  if (!name) { console.error('uso: dotrino-remote-desktop-agent supervise --name <n>'); process.exit(2) }
+  try {
+    if (service.superviseCommand({ name, dir: dataDir(name), cli: CLI }).relaunched) process.exit(0)
+  } catch (e) { die(e) }
+}
+
+if (cmd === 'service') {
+  const action = args[1]
+  if (!['install', 'uninstall', 'status'].includes(action)) { console.error('uso: dotrino-remote-desktop-agent service install|uninstall|status [--name <n>]'); process.exit(2) }
+  const name = opt('--name') || 'default'
+  const dir = dataDir(name)
+  try {
+    if (action === 'status') {
+      const st = service.serviceStatus({ name, dir })
+      if (!st.installed) console.log(`El agente «${name}» no tiene servicio. Para ponerlo: dotrino-remote-desktop-agent service install --name ${name}`)
+      else console.log(`Servicio puesto (${st.file}). ${st.active ? 'Está corriendo.' : 'Ahora no está corriendo: arranca al iniciar tu sesión.'}`)
+    } else if (action === 'uninstall') {
+      const r = service.uninstallService({ name, dir })
+      console.log(r.removed ? `Servicio quitado (${r.file}). El enlace se queda.` : `El agente «${name}» no tenía servicio.`)
+    } else {
+      // Sin enlace, el agente pediría enlazarse en una terminal que el servicio no tiene.
+      if (!loadLink(dir)) { console.error(`Este agente no está enlazado. Enlázalo primero: dotrino-remote-desktop-agent --name ${name}`); process.exit(1) }
+      const r = service.installService({ name, cli: CLI, dir, running: agentRunning(dir) })
+      console.log(`Servicio puesto (${r.file}): el agente arranca al iniciar tu sesión y se vuelve a levantar si se cae.`)
+      if (r.started) console.log('El agente ya corre como servicio.')
+      else if (r.startReason) console.log(`Ahora no se pudo arrancar (${r.startReason}): arrancará al iniciar tu sesión.`)
+      else console.log('Ahora mismo corre otro agente de este perfil y no se toca. El servicio toma el relevo al próximo inicio de sesión.')
+    }
+  } catch (e) { die(e) }
+  process.exit(0)
+}
+
+if (cmd !== 'run' && cmd !== 'enroll' && cmd !== 'supervise') { console.error(`comando desconocido: ${cmd} (mira --help)`); process.exit(2) }
+
+/** ¿Corre ya un agente de ese perfil? (el que se levantó a mano, o el del supervisor) @param {string} dir */
+function agentRunning (dir) {
+  let pid = 0
+  try { pid = Number(readFileSync(path.join(dir, 'agent.pid'), 'utf8')) } catch (e) { if (/** @type {NodeJS.ErrnoException} */ (e).code !== 'ENOENT') throw e }
+  if (!pid) return false
+  try { process.kill(pid, 0); return true } catch (e) { return /** @type {NodeJS.ErrnoException} */ (e).code === 'EPERM' }
+}
+
+// El supervisor de arriba sigue vivo con su hijo: aquí no se corre otro agente.
+if (cmd !== 'supervise') try {
   const dir = opt('--dir') || dataDir(opt('--name'))
+  // Sin terminal (el servicio) no hay a quién preguntar para enlazar: se para y se dice.
+  if (!process.stdin.isTTY && (cmd === 'enroll' || !loadLink(dir))) throw new Error(`este agente no está enlazado (${dir}). Enlázalo desde una terminal: dotrino-remote-desktop-agent --name <n>`)
   // Antes de nada, también de enlazar: dos procesos con el mismo enlace son la misma llave.
   process.on('exit', lockInstance(dir))
   if (cmd === 'enroll' || !loadLink(dir)) {

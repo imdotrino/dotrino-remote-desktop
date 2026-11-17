@@ -14,7 +14,12 @@ npm install -g @dotrino/remote-desktop-agent
 dotrino-remote-desktop-agent          # enlaza con tu bóveda la primera vez y corre
 dotrino-remote-desktop-agent info     # qué aparato es (su ID)
 dotrino-remote-desktop-agent update   # cómo se actualiza (§15)
+dotrino-remote-desktop-agent service install   # arranca solo al iniciar tu sesión
 ```
+
+`service install` lo pone en el inicio automático del escritorio (`~/.config/autostart`), con un
+supervisor que lo vuelve a levantar si se cae. No es una unidad de systemd: el agente necesita la
+sesión gráfica, y lo que arranca al encender no la tiene. `service status` y `service uninstall`.
 
 Corre dentro de la sesión gráfica del usuario: necesita su bus de sesión y el de accesibilidad
 (`at-spi2-core`). Protocolo y diseño: [el repo](https://github.com/imdotrino/dotrino-remote-desktop).
