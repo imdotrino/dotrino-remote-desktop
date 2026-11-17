@@ -581,8 +581,9 @@ function desktopScreen (link, sub, name = '') {
 
   // ---------- MODO RATÓN (dueño, 2026-11-16): el toque como un touchpad ----------
   // Un dedo mueve el puntero (por desplazamiento, no hace falta tocar encima) y la vista lo
-  // sigue; tocar con un segundo dedo es clic donde está el puntero, y dejarlo apoyado mantiene
-  // el botón pulsado para arrastrar. Separar los dos dedos sigue siendo zoom.
+  // sigue; un toque corto de ese dedo, o tocar con un segundo dedo, es clic donde está el puntero,
+  // y dejar apoyado el segundo mantiene el botón pulsado para arrastrar. Separar los dos dedos
+  // sigue siendo zoom.
   const TOUCH_KEY = 'dotrino-remote-desktop:touch'
   /** @type {'pan' | 'mouse'} */
   let touchMode = 'pan'
@@ -644,8 +645,11 @@ function desktopScreen (link, sub, name = '') {
       applyTouchMode()
     })
   }
-  /** @type {{ id: number, x: number, y: number } | null} el dedo que mueve */
+  /** @type {{ id: number, x: number, y: number, at: number, moved: number, solo: boolean } | null} el dedo que mueve */
   let finger = null
+  /** Un toque corto de un dedo sin moverse es clic, como en un touchpad (dueño, 2026-11-16). */
+  const TAP_MS = 250
+  const TAP_PX = 10
   /** @type {{ id: number, at: number, d0: number, z0: number, mx: number, my: number, zooming: boolean, holding: boolean, timer: ReturnType<typeof setTimeout> | null } | null} el segundo dedo */
   let second = null
   /** @param {TouchList} list @param {number} id */
@@ -654,7 +658,8 @@ function desktopScreen (link, sub, name = '') {
     if (touchMode !== 'mouse') return
     e.preventDefault()
     if (!cursor.placed) centerCursor()
-    if (!finger && e.touches.length >= 1) { const t = e.touches[0]; finger = { id: t.identifier, x: t.clientX, y: t.clientY } }
+    if (!finger && e.touches.length >= 1) { const t = e.touches[0]; finger = { id: t.identifier, x: t.clientX, y: t.clientY, at: Date.now(), moved: 0, solo: e.touches.length === 1 } }
+    if (finger && e.touches.length > 1) finger.solo = false
     if (e.touches.length === 2 && !second) {
       const t2 = [...e.touches].find((t) => t.identifier !== finger?.id)
       if (!t2) return
@@ -687,6 +692,7 @@ function desktopScreen (link, sub, name = '') {
     const k = scaleNow()
     cursor.x = Math.max(0, Math.min(scene.screen.w - 1, cursor.x + (t.clientX - finger.x) * GAIN / k))
     cursor.y = Math.max(0, Math.min(scene.screen.h - 1, cursor.y + (t.clientY - finger.y) * GAIN / k))
+    finger.moved += Math.abs(t.clientX - finger.x) + Math.abs(t.clientY - finger.y)
     finger.x = t.clientX; finger.y = t.clientY
     placeCursor(); keepVisible(); sendMove()
   }, { passive: false })
@@ -701,9 +707,11 @@ function desktopScreen (link, sub, name = '') {
       second = null
     }
     if (finger && !touchById(e.touches, finger.id)) {
+      // Un toque corto, de un solo dedo y sin moverse: clic donde está el puntero.
+      if (finger.solo && finger.moved < TAP_PX && Date.now() - finger.at < TAP_MS && e.touches.length === 0) send({ type: 'click', ...at, button: 1 })
       // El dedo que movía se levantó: el que quede (si queda) pasa a mover.
       const t = e.touches[0]
-      finger = t ? { id: t.identifier, x: t.clientX, y: t.clientY } : null
+      finger = t ? { id: t.identifier, x: t.clientX, y: t.clientY, at: Date.now(), moved: TAP_PX, solo: false } : null
       if (t && second && second.id === t.identifier) { if (second.timer) clearTimeout(second.timer); if (second.holding) send({ type: 'release', ...at, button: 1 }); second = null }
     }
   }, { passive: false })
