@@ -62,6 +62,8 @@ const M = {
     all_screen: 'Todo el escritorio',
     active_win: 'Ventana activa',
     active_short: 'Activa',
+    screen: 'Pantalla',
+    screen_n: (n) => `Pantalla ${n}`,
     all_short: 'Todo',
     taskbar: 'Ventanas abiertas',
     hscroll: 'Desplazar a los lados',
@@ -111,6 +113,8 @@ const M = {
     all_screen: 'Whole desktop',
     active_win: 'Active window',
     active_short: 'Active',
+    screen: 'Screen',
+    screen_n: (n) => `Screen ${n}`,
     all_short: 'All',
     taskbar: 'Open windows',
     hscroll: 'Scroll sideways',
@@ -330,6 +334,20 @@ function desktopScreen (link, sub, name = '') {
     const n = scene && id != null ? scene.nodes.find((x) => x.id === id) : null
     return n ? { x: n.x, y: n.y, w: n.w, h: n.h } : null
   }
+  // LAS PANTALLAS: el fondo de escritorio de cada monitor es una ventana más (en XFCE, la de
+  // `xfdesktop`), del tamaño del monitor y sin nada por dentro. Elegirla como ventana enseñaba un
+  // fondo vacío (dueño, 2026-11-16). Se tratan como pantallas: encuadran el monitor y se ve todo
+  // lo que hay en él.
+  const DESKTOP_APPS = new Set(['xfdesktop', 'nautilus-desktop', 'pcmanfm', 'plasmashell', 'caja', 'nemo-desktop'])
+  /** ¿Es el fondo de un monitor? @param {{ app: string, name: string }} w */
+  const isMonitorWin = (w) => DESKTOP_APPS.has(w.app) || /^(Desktop|Escritorio)$/i.test(w.name)
+  /** Los monitores, de izquierda a derecha. */
+  const monitors = () => scene
+    ? scene.wins.filter(isMonitorWin).map((w) => ({ id: w.id, r: rectOf(w.id) })).filter((m) => m.r).sort((a, b) => (/** @type {Rect} */ (a.r)).x - (/** @type {Rect} */ (b.r)).x || (/** @type {Rect} */ (a.r)).y - (/** @type {Rect} */ (b.r)).y)
+    : []
+  /** @param {number | null | undefined} id */
+  const isMonitor = (id) => id != null && monitors().some((m) => m.id === id)
+
   /** La ventana que se mira ahora (o null = todo el escritorio). */
   const targetId = () => {
     if (!scene || watch === 'all') return null
@@ -342,17 +360,20 @@ function desktopScreen (link, sub, name = '') {
   const follow = () => {
     const id = targetId()
     const r = rectOf(id ?? undefined)
-    const key = JSON.stringify([r, id])
-    if (key !== lastLook) { lastLook = key; view.look(r, r ? id : null) }
+    // Una pantalla se encuadra entera y se ve todo lo que hay en ella, en el orden de la máquina.
+    const mon = isMonitor(id)
+    const top = r && !mon ? id : null
+    const key = JSON.stringify([r, id, mon])
+    if (key !== lastLook) { lastLook = key; view.look(r, top) }
     // El encuadre solo al CAMBIAR de ventana: después, el zoom y el desplazamiento son de la
     // persona (si se reencuadrara con cada cambio, pelearía con su dedo).
     const fitId = r ? id : null
     if (fitId !== lastFit) { lastFit = fitId; requestAnimationFrame(() => fitTo(r)) }
-    chooseVideo(r ? id : null)
+    chooseVideo(top)
     // Las imágenes guardadas van por encima de todo: con una ventana a la vista, solo las suyas.
     // Si no, la imagen congelada de otra que está en el mismo sitio la tapaba (pasó con Slack
     // encima de la terminal, dueño 2026-11-16).
-    const only = r ? id : null
+    const only = top
     videoLayer.sync((x) => rectOf(x), (x) => only == null || view.ownerOf(x) === only)
   }
 
@@ -431,7 +452,7 @@ function desktopScreen (link, sub, name = '') {
     follow()
     showWins()
     // Elegir una ventana es querer trabajar en ella: se trae al frente, con el foco, en la máquina.
-    if (typeof watch === 'number') send({ type: 'raise', id: watch })
+    if (typeof watch === 'number' && !isMonitor(watch)) send({ type: 'raise', id: watch })
   }
   // ORDEN FIJO: el agente da las ventanas en orden de apilado (la activa, la última), así que
   // traer una al frente la movía de sitio en la barra. Aquí cada una conserva el suyo desde que
@@ -455,7 +476,10 @@ function desktopScreen (link, sub, name = '') {
       return b
     }
     const items = [btn(t('active_short'), 'active', ' fixed'), btn(t('all_short'), 'all', ' fixed')]
-    for (const id of taskOrder) { const w = byId.get(id); if (w) items.push(btn(w.name, id)) }
+    const mons = monitors()
+    mons.forEach((m, i) => items.push(btn(mons.length > 1 ? t('screen_n', i + 1) : t('screen'), m.id, ' fixed')))
+    const monIds = new Set(mons.map((m) => m.id))
+    for (const id of taskOrder) { const w = byId.get(id); if (w && !monIds.has(id)) items.push(btn(w.name, id)) }
     taskbar.replaceChildren(...items)
   }
 
