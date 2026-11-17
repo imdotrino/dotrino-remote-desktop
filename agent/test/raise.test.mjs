@@ -57,3 +57,18 @@ test('pickWindow: Chrome con el perfil añadido en accesibilidad, por sitio y po
   assert.equal(pickWindow(cands, a11y, null), '2')
   assert.equal(pickWindow(cands, 'Nada que ver', null), null)
 })
+
+test('pickWindow: varias ventanas de Chrome maximizadas (mismo sitio) se distinguen por el título', async () => {
+  const { pickWindow, sameTitle } = await import('../raise.js')
+  const r = { x: 1920, y: 0, w: 1920, h: 1039 }
+  const cands = [
+    { id: 'a', name: 'Login Page - Google Chrome', ...r },
+    { id: 'b', name: 'Inbox - Zoho Mail - Google Chrome', ...r },
+    { id: 'c', name: '@dotrino/remote-desktop-agent - npm - Google Chrome', ...r }
+  ]
+  assert.equal(pickWindow(cands, 'Inbox - Zoho Mail - Google Chrome - Santiago', r), 'b')
+  assert.equal(pickWindow(cands, '@dotrino/remote-desktop-agent - npm - Google Chrome - Santiago', r), 'c')
+  assert.equal(pickWindow(cands, 'Otra cosa', r), null, 'con varias en el mismo sitio, el sitio no decide')
+  assert.equal(sameTitle('Login Page - Google Chrome', 'Login Page - Google Chrome - Santiago'), true)
+  assert.equal(sameTitle('', 'x'), false)
+})

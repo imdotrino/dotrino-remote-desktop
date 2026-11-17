@@ -22,6 +22,17 @@ const run = (cmd, args) => new Promise((resolve, reject) => {
 const fail = (code, message) => Object.assign(new Error(message), { code })
 
 /**
+ * ¿Es el mismo título? El de X11 y el de accesibilidad no siempre son iguales: Chrome le añade al
+ * de accesibilidad el nombre del perfil («… - Google Chrome - Santiago»). Vale igual, o uno al
+ * principio del otro (y no vacío).
+ * @param {string} x11 @param {string} a11y
+ */
+export function sameTitle (x11, a11y) {
+  if (!x11 || !a11y) return false
+  return x11 === a11y || a11y.startsWith(x11) || x11.startsWith(a11y)
+}
+
+/**
  * Elige, de las ventanas X11 de un proceso, la que corresponde a la ventana de accesibilidad.
  * El título no siempre es el mismo: Chrome le añade en accesibilidad el nombre del perfil y avisos
  * («… - Google Chrome - Santiago», «High memory usage - 1.2 GB»). Por eso, en orden: el título
@@ -35,10 +46,18 @@ const fail = (code, message) => Object.assign(new Error(message), { code })
 export function pickWindow (cands, title, rect = null) {
   const exact = cands.find((c) => c.name === title)
   if (exact) return exact.id
+  // El título de X11 al principio del de accesibilidad (Chrome añade « - <perfil>»): va ANTES
+  // que el sitio, porque las ventanas maximizadas de un mismo programa están todas en el mismo
+  // sitio con el mismo tamaño, y por sitio salía siempre la primera (dueño, 2026-11-17: elegir
+  // una ventana de Chrome «loopea entre las otras»).
+  let pre = null
+  for (const c of cands) if (c.name && sameTitle(c.name, title) && (!pre || c.name.length > pre.name.length)) pre = c
+  if (pre) return pre.id
   if (rect) {
     const near = (/** @type {number | undefined} */ a, /** @type {number} */ b) => a != null && Math.abs(a - b) <= 50
-    const same = cands.find((c) => near(c.x, rect.x) && near(c.y, rect.y) && near(c.w, rect.w) && near(c.h, rect.h))
-    if (same) return same.id
+    const same = cands.filter((c) => near(c.x, rect.x) && near(c.y, rect.y) && near(c.w, rect.w) && near(c.h, rect.h))
+    // Solo si es UNA: con varias en el mismo sitio, el sitio no dice cuál.
+    if (same.length === 1) return same[0].id
   }
   let best = null; let bestLen = 9
   for (const c of cands) {

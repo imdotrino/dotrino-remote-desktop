@@ -15,7 +15,7 @@
  */
 import { makeReader, openA11yBus, setA11y, restoreA11y } from './atspi.js'
 import { diff, screenOf } from './scene.js'
-import { activeWindow } from './raise.js'
+import { activeWindow, sameTitle } from './raise.js'
 
 export const SETTLE_MS = 120
 export const WINDOWS_MS = 1000
@@ -120,8 +120,11 @@ export function makeDesktop (opts = {}) {
       for (const w of wins) {
         let pid = pids.get(w.ref[0])
         if (pid == null) { try { pid = await reader.pidOf(w.id) } catch (_) { pid = -1 } pids.set(w.ref[0], pid) }
-        w.active = pid === real.pid && w.name === real.title
+        w.active = pid === real.pid && sameTitle(real.title, w.name)
       }
+      // Por si dos casan por el principio del título: la de título más largo que case, una sola.
+      const act = wins.filter((w) => w.active)
+      if (act.length > 1) { const best = act.reduce((a, b) => (b.name.length > a.name.length ? b : a)); for (const w of act) w.active = w === best }
       wins.sort((a, b) => Number(a.active) - Number(b.active))
       // UNA APP SIN ACCESIBILIDAD (la terminal de Dotrino, un juego) no sale en la lista: si es
       // la activa, se enseña igual, como un hueco entero con su sitio y su título. Lleva vídeo.
