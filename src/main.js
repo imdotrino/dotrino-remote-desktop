@@ -324,19 +324,19 @@ function desktopScreen (link, sub, name = '') {
     return watch
   }
   let lastLook = ''
+  /** @type {number | null | undefined} la ventana que se encuadró la última vez */
+  let lastFit
   const follow = () => {
     const id = targetId()
     const r = rectOf(id ?? undefined)
     const key = JSON.stringify([r, id])
     if (key !== lastLook) { lastLook = key; view.look(r, r ? id : null) }
+    // El encuadre solo al CAMBIAR de ventana: después, el zoom y el desplazamiento son de la
+    // persona (si se reencuadrara con cada cambio, pelearía con su dedo).
+    const fitId = r ? id : null
+    if (fitId !== lastFit) { lastFit = fitId; requestAnimationFrame(() => fitTo(r)) }
     chooseVideo(r ? id : null)
-    syncTiles(r ? id : null)
-  }
-  /** Las imágenes guardadas de los huecos, en su sitio; con una ventana a la vista, solo las suyas. @param {number | null} only */
-  const syncTiles = (only) => {
-    videoLayer.sync(
-      (id) => rectOf(id),
-      (id) => only == null || view.ownerOf(id) === only)
+    videoLayer.sync((x) => rectOf(x), () => true)
   }
 
   // ---------- el vídeo de los huecos (agent/video.js, src/video.js) ----------
@@ -392,7 +392,7 @@ function desktopScreen (link, sub, name = '') {
   // ZOOM: el SVG se hace más ancho que la pantalla y el escenario se desplaza con el dedo
   // (scroll nativo). Sin trucos de gestos: el navegador ya sabe desplazar.
   // Zoom continuo: los botones lo multiplican y el pellizco con dos dedos lo lleva a mano.
-  const ZOOM_MAX = 6
+  const ZOOM_MAX = 12
   let zoom = 1
   // LA BARRA DE ABAJO, GRUESA (dueño, 2026-11-16): un control propio y no la barra del navegador,
   // que en las tabletas se esconde y no se puede engrosar. Sale solo si hay qué desplazar.
@@ -426,6 +426,24 @@ function desktopScreen (link, sub, name = '') {
     requestAnimationFrame(syncBar)
   }
   $(node, '[data-testid=zoom-in]').addEventListener('click', () => setZoom(zoom * 1.5))
+
+  /**
+   * Encuadra una ventana: el zoom justo para que entre entera en la pantalla, centrada. El lienzo
+   * sigue siendo el escritorio entero: con el dedo se sale de la ventana. `null`: todo, sin zoom.
+   * @param {Rect | null} r
+   */
+  function fitTo (r) {
+    if (!scene) return
+    const W = stage.clientWidth; const H = stage.clientHeight
+    const s1 = W / Math.max(1, scene.screen.w)
+    const z = r ? Math.min(ZOOM_MAX, Math.max(1, Math.min(scene.screen.w / r.w, H / (r.h * s1)))) : 1
+    zoom = z
+    svg.style.width = `${zoom * 100}%`
+    $(node, '[data-testid=zoom-level]').textContent = `${zoom.toFixed(1).replace(/\.0$/, '')}×`
+    stage.scrollLeft = r ? r.x * s1 * z - (W - r.w * s1 * z) / 2 : 0
+    stage.scrollTop = r ? r.y * s1 * z - (H - r.h * s1 * z) / 2 : 0
+    requestAnimationFrame(syncBar)
+  }
   $(node, '[data-testid=zoom-out]').addEventListener('click', () => setZoom(zoom / 1.5))
 
   // PELLIZCO CON DOS DEDOS (dueño, 2026-11-16). Un dedo desplaza (scroll nativo del escenario);

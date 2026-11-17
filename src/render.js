@@ -123,20 +123,29 @@ export function makeView (svg, words) {
   svg.replaceChildren(layer, overlay)
   /** @type {{ x: number, y: number, w: number, h: number } | null} lo que se está mirando */
   let focus = null
-  /** @type {number | null} la única ventana que se dibuja (null = todas) */
-  let only = null
+  /** @type {number | null} la ventana que va ENCIMA de las demás (null = el orden de la máquina) */
+  let top = null
   /** @type {Map<number, number>} nodo → la ventana a la que pertenece */
   let owner = new Map()
-  /** Enseña solo los nodos de `only` (o todos). Con todas dibujadas, lo que está delante de la
-   *  ventana elegida le pintaba encima sus botones (dueño, 2026-11-16). */
-  const applyOnly = () => {
-    for (const [id, e] of els) e.g.style.display = only == null || owner.get(id) === only ? '' : 'none'
+  /** @type {number[]} el orden de pintado de la escena */
+  let order = []
+  /**
+   * La ventana elegida se pinta encima de todas: con todas dibujadas en el orden de la máquina, lo
+   * que estaba delante le pintaba encima sus botones (dueño, 2026-11-16). No se esconden las
+   * demás: el lienzo es el escritorio entero y se recorre con el dedo.
+   * @param {boolean} [restore]  primero devolver todos al orden de la escena (cambió la elegida)
+   */
+  const applyTop = (restore = false) => {
+    if (restore) for (const id of order) { const e = els.get(id); if (e) layer.appendChild(e.g) }
+    if (top == null) return
+    for (const id of order) { if (owner.get(id) === top) { const e = els.get(id); if (e) layer.appendChild(e.g) } }
   }
   let screen = { w: 1, h: 1 }
 
+  // El lienzo es SIEMPRE el escritorio entero: mirar una ventana es hacer zoom y desplazarse a
+  // ella (main.js), no recortar. Recortado, el desplazamiento chocaba con el borde de la ventana.
   const viewBox = () => {
-    const v = focus || { x: 0, y: 0, w: screen.w, h: screen.h }
-    svg.setAttribute('viewBox', `${v.x} ${v.y} ${Math.max(1, v.w)} ${Math.max(1, v.h)}`)
+    svg.setAttribute('viewBox', `0 0 ${Math.max(1, screen.w)} ${Math.max(1, screen.h)}`)
   }
 
   /**
@@ -157,7 +166,8 @@ export function makeView (svg, words) {
       while (!wins.has(id) && parent.has(id) && hops++ < 80) id = /** @type {number} */ (parent.get(id))
       owner.set(n.id, wins.has(id) ? id : -1)
     }
-    const alive = new Set(scene.nodes.map((n) => n.id))
+    order = scene.nodes.map((n) => n.id)
+    const alive = new Set(order)
     for (const [id, e] of els) if (!alive.has(id)) { e.g.remove(); els.delete(id) }
     for (const n of scene.nodes) {
       const had = els.get(n.id)
@@ -166,19 +176,20 @@ export function makeView (svg, words) {
       if (had) had.g.replaceWith(g)
       els.set(n.id, { g, n })
     }
-    // Orden de pintado: el de la escena. `append` mueve sin recrear.
+    // Orden de pintado: el de la escena (y la elegida encima, applyTop). `append` mueve sin recrear.
     if (reordered || !changed) for (const n of scene.nodes) layer.appendChild(/** @type {{ g: SVGGElement }} */ (els.get(n.id)).g)
     else for (const n of scene.nodes) { const e = els.get(n.id); if (e && !e.g.parentNode) layer.appendChild(e.g) }
-    applyOnly()
+    applyTop()
     viewBox()
   }
 
   /**
-   * Mirar solo una parte del escritorio (una ventana) o, con `null`, todo.
+   * Qué se mira: una ventana (va encima de las demás) o, con `null`, todo en el orden de la
+   * máquina. El encuadre (zoom y desplazamiento) lo pone main.js.
    * @param {{ x: number, y: number, w: number, h: number } | null} rect
-   * @param {number | null} [win]  dibujar solo esa ventana (null = todas)
+   * @param {number | null} [win]
    */
-  function look (rect, win = null) { focus = rect; only = win; applyOnly(); viewBox() }
+  function look (rect, win = null) { focus = rect; const changed = win !== top; top = win; applyTop(changed); viewBox() }
 
   /**
    * De un punto del navegador al punto de la pantalla de la máquina.
