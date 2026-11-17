@@ -82,6 +82,11 @@ a { color: var(--dt-accent); text-underline-offset: 3px; }
 .taskbar::-webkit-scrollbar { display: none; }
 .task { flex-shrink: 0; display: inline-flex; align-items: center; gap: 6px; font: inherit; font-size: 13px; max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 6px 12px; border-radius: var(--dt-radius-pill); border: 1px solid var(--dt-line); background: var(--dt-surface); color: var(--dt-text); cursor: pointer; }
 .task.fixed { font-weight: 600; }
+/* Las pantallas: «Todo» con la forma del escritorio, y los monitores unidos como en la máquina. */
+.scr { flex-shrink: 0; align-self: center; box-sizing: border-box; padding: 0; border: 2px solid var(--dt-text-dim); border-radius: 3px; background: var(--dt-surface); cursor: pointer; }
+.scr.on { background: var(--dt-accent); border-color: var(--dt-accent); }
+.scrs { position: relative; flex-shrink: 0; align-self: center; }
+.scrs .scr { border-radius: 0; }
 .tlabel { overflow: hidden; text-overflow: ellipsis; }
 .ticon { flex-shrink: 0; width: 20px; height: 20px; }
 .tletter { display: inline-grid; place-items: center; border-radius: 6px; font-size: 12px; font-weight: 700; background: var(--dt-line); color: var(--dt-text); }

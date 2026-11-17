@@ -542,9 +542,34 @@ function desktopScreen (link, sub, name = '') {
       b.addEventListener('click', () => pick(what))
       return b
     }
-    const items = [btn(t('active_short'), 'active', ' fixed'), btn(t('all_short'), 'all', ' fixed')]
+    const items = [btn(t('active_short'), 'active', ' fixed')]
     const mons = monitors()
-    mons.forEach((m, i) => items.push(btn(mons.length > 1 ? t('screen_n', i + 1) : t('screen'), m.id, ' fixed')))
+    // LAS PANTALLAS, DIBUJADAS (dueño, 2026-11-17): «Todo» es un rectángulo con la forma del
+    // escritorio entero, y cada monitor un rectángulo unido a los otros como están en la máquina.
+    // Con un solo monitor, «Todo» y la pantalla son lo mismo: un rectángulo y nada más.
+    const H = 20
+    const rects = /** @type {Rect[]} */ (mons.map((m) => m.r))
+    const minX = Math.min(...rects.map((r) => r.x)); const minY = Math.min(...rects.map((r) => r.y))
+    const bw = rects.length ? Math.max(...rects.map((r) => r.x + r.w)) - minX : (scene?.screen.w || 16)
+    const bh = rects.length ? Math.max(...rects.map((r) => r.y + r.h)) - minY : (scene?.screen.h || 9)
+    const k = H / Math.max(1, bh)
+    const px = (/** @type {number} */ v) => `${Math.max(2, Math.round(v * k))}px`
+    /** @param {string} label @param {'all' | number} what @param {string} style */
+    const shape = (label, what, style) => {
+      const b = el(`<button class="scr${watch === what ? ' on' : ''}" data-testid="task-screen" title="${esc(label)}" aria-label="${esc(label)}" style="${style}"></button>`)
+      b.addEventListener('click', () => pick(what))
+      return b
+    }
+    items.push(shape(t('all_short'), 'all', `width:${px(bw)};height:${px(bh)}`))
+    if (mons.length > 1) {
+      // Cada monitor se agranda 1 px por lado: los bordes que se tocan quedan en uno solo.
+      const group = el(`<span class="scrs" style="width:${Math.round(bw * k) + 2}px;height:${Math.round(bh * k) + 2}px"></span>`)
+      mons.forEach((m, i) => {
+        const r = /** @type {Rect} */ (m.r)
+        group.appendChild(shape(t('screen_n', i + 1), m.id, `position:absolute;left:${Math.round((r.x - minX) * k)}px;top:${Math.round((r.y - minY) * k)}px;width:${Math.round(r.w * k) + 2}px;height:${Math.round(r.h * k) + 2}px`))
+      })
+      items.push(group)
+    }
     const monIds = new Set(mons.map((m) => m.id))
     for (const id of taskOrder) {
       const w = byId.get(id)
