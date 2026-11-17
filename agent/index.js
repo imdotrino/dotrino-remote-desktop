@@ -158,7 +158,10 @@ export function serveSession (session, desktop, { log = () => {}, route = async 
         case 'video':
           if (id !== null && !int(id)) return fail('bad-input', 'video needs a node id, or null to stop')
           videoId = id
-          if (videoId == null) { video.stop(); watchRoute(false); return }
+          // Pedirlo otra vez REHACE la captura: empieza con un cuadro completo. Con la ventana quieta
+          // solo sale ese, y si se perdió, el cliente no tenía con qué pintar hasta el próximo cambio.
+          video.stop()
+          if (videoId == null) { watchRoute(false); return }
           watchRoute(true)
           videoRoute = null
           await checkRoute()

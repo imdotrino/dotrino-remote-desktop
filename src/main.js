@@ -373,7 +373,23 @@ function desktopScreen (link, sub, name = '') {
     videoId = want
     // La imagen que ya llegó de un hueco se queda (congelada) al dejar de mirarlo.
     videoLayer.stopLive()
-    if (!demo) send({ type: 'video', id: want })
+    requestVideo(0)
+  }
+  // Si en VIDEO_RETRY_MS no llega ningún cuadro, se vuelve a pedir (el agente rehace la captura y
+  // manda un cuadro completo). Con la ventana quieta solo sale uno, y perderlo dejaba el hueco vacío.
+  const VIDEO_RETRY_MS = 3000
+  let videoGot = false
+  /** @type {ReturnType<typeof setTimeout> | null} */
+  let videoRetry = null
+  /** @param {number} tries */
+  function requestVideo (tries) {
+    if (videoRetry) { clearTimeout(videoRetry); videoRetry = null }
+    if (demo) return
+    videoGot = false
+    send({ type: 'video', id: videoId })
+    if (videoId == null || tries >= 3) return
+    const id = videoId
+    videoRetry = setTimeout(() => { if (!videoGot && videoId === id) requestVideo(tries + 1) }, VIDEO_RETRY_MS)
   }
 
   /**
@@ -405,29 +421,50 @@ function desktopScreen (link, sub, name = '') {
     taskbar.replaceChildren(...items)
   }
 
-  // ZOOM: el SVG se hace más ancho que la pantalla y el escenario se desplaza con el dedo
-  // (scroll nativo). Sin trucos de gestos: el navegador ya sabe desplazar.
-  // Zoom continuo: los botones lo multiplican y el pellizco con dos dedos lo lleva a mano.
+  // LA VISTA: el lienzo (el escritorio entero) se mueve y se escala DENTRO del escenario con un
+  // movimiento propio, no con el scroll del navegador. El scroll no deja mover algo más chico que
+  // el área, y entonces la imagen se quedaba pegada arriba (dueño, 2026-11-16: «debo poder moverla
+  // para abajo; lo que no puedo es que se salga»). La regla es una: el lienzo nunca sale del área.
+  // Si es más chico, se mueve dentro de ella; si es más grande, siempre la cubre.
   const ZOOM_MAX = 12
   let zoom = 1
-  // LA BARRA DE ABAJO, GRUESA (dueño, 2026-11-16): un control propio y no la barra del navegador,
-  // que en las tabletas se esconde y no se puede engrosar. Sale solo si hay qué desplazar.
+  let tx = 0; let ty = 0
   const stage = /** @type {HTMLElement} */ ($(node, '.stage'))
   const hscroll = /** @type {HTMLInputElement} */ ($(node, '.hscroll'))
-  const syncBar = () => {
-    const room = stage.scrollWidth - stage.clientWidth
-    hscroll.hidden = room <= 1
-    if (room > 1) hscroll.value = String(Math.round(stage.scrollLeft / room * 1000))
+  /** El tamaño del lienzo en el aparato, con el zoom de ahora. */
+  const canvasSize = () => {
+    const W = stage.clientWidth
+    const cw = W * zoom
+    const ch = scene ? cw * scene.screen.h / Math.max(1, scene.screen.w) : cw
+    return { W, H: stage.clientHeight, cw, ch }
   }
-  hscroll.addEventListener('input', () => { stage.scrollLeft = Number(hscroll.value) / 1000 * (stage.scrollWidth - stage.clientWidth) })
-  stage.addEventListener('scroll', syncBar, { passive: true })
-  // Girar la tableta (o cambiar el tamaño de la ventana) deja el encuadre en un sitio que ya no
-  // corresponde: si cambia el ancho, se vuelve a encuadrar lo que se mira.
+  /** Lo que se puede mover en un eje: dentro del área si cabe, cubriéndola si no. */
+  /** @param {number} t @param {number} view @param {number} size */
+  const clampAxis = (t, view, size) => size <= view ? Math.min(view - size, Math.max(0, t)) : Math.min(0, Math.max(view - size, t))
+  // LA BARRA DE ABAJO, GRUESA (dueño, 2026-11-16): un control propio, que en las tabletas la del
+  // navegador se esconde. Mueve el lienzo de lado; sale solo si es más ancho que el área.
+  const syncBar = () => {
+    const { W, cw } = canvasSize()
+    const room = cw - W
+    hscroll.hidden = room <= 1
+    if (room > 1) hscroll.value = String(Math.round(-tx / room * 1000))
+  }
+  /** Pone el lienzo donde dicen `zoom`, `tx` y `ty`, con el tope. */
+  function applyView () {
+    const { W, H, cw, ch } = canvasSize()
+    tx = clampAxis(tx, W, cw); ty = clampAxis(ty, H, ch)
+    svg.style.width = `${cw}px`
+    svg.style.transform = `translate(${tx}px, ${ty}px)`
+    syncBar()
+    placeCursor()
+  }
+  hscroll.addEventListener('input', () => { const { W, cw } = canvasSize(); tx = -Number(hscroll.value) / 1000 * (cw - W); applyView() })
+  // Girar la tableta (o cambiar el tamaño de la ventana): se vuelve a encuadrar lo que se mira.
   let lastW = 0
   new ResizeObserver(() => {
-    syncBar()
     const w = stage.clientWidth
     if (lastW && Math.abs(w - lastW) > 40) fitTo(rectOf(targetId() ?? undefined))
+    else applyView()
     lastW = w
   }).observe(stage)
   /**
@@ -441,13 +478,9 @@ function desktopScreen (link, sub, name = '') {
     const ax = (cx ?? box.left + box.width / 2) - box.left
     const ay = (cy ?? box.top + box.height / 2) - box.top
     const k = nz / zoom
-    const left = (stage.scrollLeft + ax) * k - ax
-    const top = (stage.scrollTop + ay) * k - ay
+    tx = ax - (ax - tx) * k; ty = ay - (ay - ty) * k
     zoom = nz
-    svg.style.width = `${zoom * 100}%`
-    stage.scrollLeft = left; stage.scrollTop = top
-    requestAnimationFrame(syncBar)
-    placeCursor()
+    applyView()
   }
 
   /**
@@ -459,37 +492,41 @@ function desktopScreen (link, sub, name = '') {
     if (!scene) return
     const W = stage.clientWidth; const H = stage.clientHeight
     const s1 = W / Math.max(1, scene.screen.w)
-    const z = r ? Math.min(ZOOM_MAX, Math.max(1, Math.min(scene.screen.w / r.w, H / (r.h * s1)))) : 1
-    zoom = z
-    svg.style.width = `${zoom * 100}%`
-    stage.scrollLeft = r ? r.x * s1 * z - (W - r.w * s1 * z) / 2 : 0
-    stage.scrollTop = r ? r.y * s1 * z - (H - r.h * s1 * z) / 2 : 0
-    requestAnimationFrame(syncBar)
-    placeCursor()
+    zoom = r ? Math.min(ZOOM_MAX, Math.max(1, Math.min(scene.screen.w / r.w, H / (r.h * s1)))) : 1
+    tx = r ? W / 2 - (r.x + r.w / 2) * s1 * zoom : 0
+    ty = r ? H / 2 - (r.y + r.h / 2) * s1 * zoom : 0
+    applyView()
   }
 
-  // PELLIZCO CON DOS DEDOS (dueño, 2026-11-16). Un dedo desplaza (scroll nativo del escenario);
-  // dos, hacen zoom alrededor del punto medio. El navegador no hace su propio zoom de página
-  // (touch-action sin pinch-zoom), y un toque que fue parte de un pellizco no es un clic.
+  // MODO MOVER: un dedo arrastra el lienzo, dos hacen zoom alrededor del punto medio. Un toque que
+  // fue parte de un arrastre o de un pellizco no es un clic (eso lo decide el `pointerup` del SVG).
   /** @type {{ d0: number, z0: number } | null} */
   let pinch = null
   let pinched = false
+  /** @type {{ x: number, y: number } | null} */
+  let drag = null
   /** @param {TouchList} t */
   const spread = (t) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY)
   stage.addEventListener('touchstart', (e) => {
     if (touchMode !== 'pan') return
-    if (e.touches.length === 2) { pinch = { d0: spread(e.touches), z0: zoom }; pinched = true }
+    if (e.touches.length === 1) drag = { x: e.touches[0].clientX, y: e.touches[0].clientY }
+    if (e.touches.length === 2) { drag = null; pinch = { d0: spread(e.touches), z0: zoom }; pinched = true }
   }, { passive: true })
   stage.addEventListener('touchmove', (e) => {
     if (touchMode !== 'pan') return
-    if (!pinch || e.touches.length !== 2) return
     e.preventDefault()
     const t = e.touches
-    setZoom(pinch.z0 * spread(t) / pinch.d0, (t[0].clientX + t[1].clientX) / 2, (t[0].clientY + t[1].clientY) / 2)
+    if (pinch && t.length === 2) { setZoom(pinch.z0 * spread(t) / pinch.d0, (t[0].clientX + t[1].clientX) / 2, (t[0].clientY + t[1].clientY) / 2); return }
+    if (drag && t.length === 1) {
+      tx += t[0].clientX - drag.x; ty += t[0].clientY - drag.y
+      drag = { x: t[0].clientX, y: t[0].clientY }
+      applyView()
+    }
   }, { passive: false })
   stage.addEventListener('touchend', (e) => {
     if (e.touches.length < 2) pinch = null
-    if (e.touches.length === 0) setTimeout(() => { pinched = false }, 0)
+    if (e.touches.length === 1) drag = { x: e.touches[0].clientX, y: e.touches[0].clientY }
+    if (e.touches.length === 0) { drag = null; setTimeout(() => { pinched = false }, 0) }
   }, { passive: true })
 
   // ---------- MODO RATÓN (dueño, 2026-11-16): el toque como un touchpad ----------
@@ -516,11 +553,13 @@ function desktopScreen (link, sub, name = '') {
   /** La vista sigue al puntero: si se acerca al borde, se desplaza. */
   const keepVisible = () => {
     const k = scaleNow(); const m = 60
-    const cx = cursor.x * k; const cy = cursor.y * k
-    if (cx < stage.scrollLeft + m) stage.scrollLeft = cx - m
-    else if (cx > stage.scrollLeft + stage.clientWidth - m) stage.scrollLeft = cx - stage.clientWidth + m
-    if (cy < stage.scrollTop + m) stage.scrollTop = cy - m
-    else if (cy > stage.scrollTop + stage.clientHeight - m) stage.scrollTop = cy - stage.clientHeight + m
+    // Dónde cae el puntero en el área (píxeles del aparato), y se mueve el lienzo si se acerca al borde.
+    const cx = cursor.x * k + tx; const cy = cursor.y * k + ty
+    if (cx < m) tx += m - cx
+    else if (cx > stage.clientWidth - m) tx -= cx - (stage.clientWidth - m)
+    if (cy < m) ty += m - cy
+    else if (cy > stage.clientHeight - m) ty -= cy - (stage.clientHeight - m)
+    applyView()
   }
   let lastMoveAt = 0
   /** @type {ReturnType<typeof setTimeout> | null} */
@@ -536,12 +575,11 @@ function desktopScreen (link, sub, name = '') {
   const centerCursor = () => {
     if (!scene) return
     const k = scaleNow()
-    cursor.x = Math.min(scene.screen.w - 1, (stage.scrollLeft + stage.clientWidth / 2) / k)
-    cursor.y = Math.min(scene.screen.h - 1, (stage.scrollTop + stage.clientHeight / 2) / k)
+    cursor.x = Math.max(0, Math.min(scene.screen.w - 1, (stage.clientWidth / 2 - tx) / k))
+    cursor.y = Math.max(0, Math.min(scene.screen.h - 1, (stage.clientHeight / 2 - ty) / k))
     cursor.placed = true
   }
   function applyTouchMode () {
-    stage.style.touchAction = touchMode === 'mouse' ? 'none' : ''
     cursorG.style.display = touchMode === 'mouse' ? '' : 'none'
     for (const b of node.querySelectorAll('[data-mode]')) {
       const on = /** @type {HTMLElement} */ (b).dataset.mode === touchMode
@@ -700,6 +738,7 @@ function desktopScreen (link, sub, name = '') {
         }
         if (p.type === 'vframe') {
           if (p.id !== videoId) return
+          videoGot = true
           // Por el proxio la imagen va reducida (un cuarto de los píxeles, 3 por segundo): se dice.
           const msg = p.q === 'relay' ? t('video_low') : ''
           if (status.textContent !== msg) status.textContent = msg
@@ -711,7 +750,7 @@ function desktopScreen (link, sub, name = '') {
       })
       rc.on('error', (/** @type {unknown} */ e) => { status.textContent = errorText(e) })
       // La máquina se reinició y la sesión se rehízo sola: se vuelve a pedir la escena.
-      rc.on('resumed', () => send({ type: 'scene' }))
+      rc.on('resumed', () => { send({ type: 'scene' }); if (videoId != null) requestVideo(0) })
       await rc.connect()
       if (closed) { rc.close().catch(() => {}); return }
       send({ type: 'scene' })
