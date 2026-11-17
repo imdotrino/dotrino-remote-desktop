@@ -520,29 +520,43 @@ function desktopScreen (link, sub, name = '') {
 
   // MODO MOVER: un dedo arrastra el lienzo, dos hacen zoom alrededor del punto medio. Un toque que
   // fue parte de un arrastre o de un pellizco no es un clic (eso lo decide el `pointerup` del SVG).
-  /** @type {{ d0: number, z0: number } | null} */
+  /** @type {{ d0: number, z0: number, mx: number, my: number } | null} */
   let pinch = null
   let pinched = false
   /** @type {{ x: number, y: number } | null} */
   let drag = null
   /** @param {TouchList} t */
   const spread = (t) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY)
+  /** @param {TouchList} t */
+  const mid = (t) => ({ x: (t[0].clientX + t[1].clientX) / 2, y: (t[0].clientY + t[1].clientY) / 2 })
+  /**
+   * Un paso del pellizco: zoom alrededor del punto medio Y desplazamiento con él (dueño,
+   * 2026-11-16: «el pinch no tiene pan»). Mover los dos dedos juntos lleva la imagen, como en un mapa.
+   * @param {{ d0: number, z0: number, mx: number, my: number }} g @param {TouchList} t
+   */
+  const pinchMove = (g, t) => {
+    const m = mid(t)
+    tx += m.x - g.mx; ty += m.y - g.my
+    g.mx = m.x; g.my = m.y
+    setZoom(g.z0 * spread(t) / g.d0, m.x, m.y)
+  }
   stage.addEventListener('touchstart', (e) => {
     if (touchMode !== 'pan') return
     if (e.touches.length === 1) drag = { x: e.touches[0].clientX, y: e.touches[0].clientY }
-    if (e.touches.length === 2) { drag = null; pinch = { d0: spread(e.touches), z0: zoom }; pinched = true }
+    if (e.touches.length === 2) { drag = null; const m = mid(e.touches); pinch = { d0: spread(e.touches), z0: zoom, mx: m.x, my: m.y }; pinched = true }
   }, { passive: true })
   stage.addEventListener('touchmove', (e) => {
     if (touchMode !== 'pan') return
     e.preventDefault()
     const t = e.touches
-    if (pinch && t.length === 2) { setZoom(pinch.z0 * spread(t) / pinch.d0, (t[0].clientX + t[1].clientX) / 2, (t[0].clientY + t[1].clientY) / 2); return }
+    if (pinch && t.length === 2) { pinchMove(pinch, t); return }
     if (drag && t.length === 1) {
       tx += t[0].clientX - drag.x; ty += t[0].clientY - drag.y
       drag = { x: t[0].clientX, y: t[0].clientY }
       applyView()
     }
   }, { passive: false })
+  stage.addEventListener('touchcancel', () => { pinch = null; drag = null }, { passive: true })
   stage.addEventListener('touchend', (e) => {
     if (e.touches.length < 2) pinch = null
     if (e.touches.length === 1) drag = { x: e.touches[0].clientX, y: e.touches[0].clientY }
@@ -616,7 +630,7 @@ function desktopScreen (link, sub, name = '') {
   }
   /** @type {{ id: number, x: number, y: number } | null} el dedo que mueve */
   let finger = null
-  /** @type {{ id: number, at: number, d0: number, z0: number, zooming: boolean, holding: boolean, timer: ReturnType<typeof setTimeout> | null } | null} el segundo dedo */
+  /** @type {{ id: number, at: number, d0: number, z0: number, mx: number, my: number, zooming: boolean, holding: boolean, timer: ReturnType<typeof setTimeout> | null } | null} el segundo dedo */
   let second = null
   /** @param {TouchList} list @param {number} id */
   const touchById = (list, id) => { for (const t of list) if (t.identifier === id) return t; return null }
@@ -628,7 +642,8 @@ function desktopScreen (link, sub, name = '') {
     if (e.touches.length === 2 && !second) {
       const t2 = [...e.touches].find((t) => t.identifier !== finger?.id)
       if (!t2) return
-      const s2 = { id: t2.identifier, at: Date.now(), d0: spread(e.touches), z0: zoom, zooming: false, holding: false, timer: /** @type {ReturnType<typeof setTimeout> | null} */ (null) }
+      const m0 = mid(e.touches)
+      const s2 = { id: t2.identifier, at: Date.now(), d0: spread(e.touches), z0: zoom, mx: m0.x, my: m0.y, zooming: false, holding: false, timer: /** @type {ReturnType<typeof setTimeout> | null} */ (null) }
       s2.timer = setTimeout(() => {
         if (second !== s2 || s2.zooming) return
         s2.holding = true
@@ -643,10 +658,10 @@ function desktopScreen (link, sub, name = '') {
     // Dos dedos que se separan o se juntan: zoom, como en el otro modo.
     if (second && e.touches.length === 2 && !second.holding) {
       const d = spread(e.touches)
-      if (second.zooming || Math.abs(d - second.d0) > 24) {
+      const m = mid(e.touches)
+      if (second.zooming || Math.abs(d - second.d0) > 24 || Math.hypot(m.x - second.mx, m.y - second.my) > 24) {
         second.zooming = true
-        const t = e.touches
-        setZoom(second.z0 * d / second.d0, (t[0].clientX + t[1].clientX) / 2, (t[0].clientY + t[1].clientY) / 2)
+        pinchMove(second, e.touches)
         return
       }
     }
@@ -668,7 +683,6 @@ function desktopScreen (link, sub, name = '') {
       if (second.holding) send({ type: 'release', ...at, button: 1 })
       else if (!second.zooming && Date.now() - second.at < HOLD_MS) send({ type: 'click', ...at, button: 1 })
       second = null
-      keys.focus({ preventScroll: true })
     }
     if (finger && !touchById(e.touches, finger.id)) {
       // El dedo que movía se levantó: el que quede (si queda) pasa a mover.
@@ -707,7 +721,10 @@ function desktopScreen (link, sub, name = '') {
     // Táctil: un toque es un clic donde se tocó; arrastrar no hace nada (se desplaza la vista).
     else if (!moved && !pinched && touchMode === 'pan') send({ type: 'click', ...p, button: 1 })
     down = null
-    keys.focus({ preventScroll: true })
+    // Con ratón, el teclado físico escribe en la máquina sin más. En pantalla táctil, enfocar abriría
+    // el teclado del teléfono en cada toque (y al abrirse, la página se desplazaba): ahí se abre solo
+    // con el botón «Teclado».
+    if (e.pointerType === 'mouse') keys.focus({ preventScroll: true })
   })
   // Sin `dblclick` propio: dos pulsaciones seguidas ya son un doble clic para la máquina.
   svg.addEventListener('contextmenu', (e) => { e.preventDefault(); const p = view.toScreen(e.clientX, e.clientY); if (p) send({ type: 'click', ...p, button: 3 }) })
