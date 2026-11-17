@@ -22,10 +22,38 @@ const run = (cmd, args) => new Promise((resolve, reject) => {
 const fail = (code, message) => Object.assign(new Error(message), { code })
 
 /**
- * Trae al frente la ventana de ese proceso que se llama así.
- * @param {{ pid: number, title: string, session?: string, exec?: typeof run }} o
+ * Elige, de las ventanas X11 de un proceso, la que corresponde a la ventana de accesibilidad.
+ * El título no siempre es el mismo: Chrome le añade en accesibilidad el nombre del perfil y avisos
+ * («… - Google Chrome - Santiago», «High memory usage - 1.2 GB»). Por eso, en orden: el título
+ * exacto; si no, la que está en el mismo sitio con el mismo tamaño; si no, la de título más
+ * parecido (el de X11 suele ser el principio del de accesibilidad).
+ * @param {Array<{ id: string, name: string, x?: number, y?: number, w?: number, h?: number }>} cands
+ * @param {string} title
+ * @param {{ x: number, y: number, w: number, h: number } | null} [rect]
+ * @returns {string | null}
  */
-export async function raiseWindow ({ pid, title, session = process.env.XDG_SESSION_TYPE || '', exec = run }) {
+export function pickWindow (cands, title, rect = null) {
+  const exact = cands.find((c) => c.name === title)
+  if (exact) return exact.id
+  if (rect) {
+    const near = (/** @type {number | undefined} */ a, /** @type {number} */ b) => a != null && Math.abs(a - b) <= 50
+    const same = cands.find((c) => near(c.x, rect.x) && near(c.y, rect.y) && near(c.w, rect.w) && near(c.h, rect.h))
+    if (same) return same.id
+  }
+  let best = null; let bestLen = 9
+  for (const c of cands) {
+    let n = 0
+    while (n < c.name.length && n < title.length && c.name[n] === title[n]) n++
+    if (n > bestLen) { best = c.id; bestLen = n }
+  }
+  return best
+}
+
+/**
+ * Trae al frente la ventana de ese proceso que corresponde a esa ventana de accesibilidad.
+ * @param {{ pid: number, title: string, rect?: { x: number, y: number, w: number, h: number } | null, session?: string, exec?: typeof run }} o
+ */
+export async function raiseWindow ({ pid, title, rect = null, session = process.env.XDG_SESSION_TYPE || '', exec = run }) {
   if (session === 'wayland') throw fail('no-raise', 'Wayland does not let a program bring windows to the front')
   /** @type {string[]} */
   let ids
@@ -37,16 +65,22 @@ export async function raiseWindow ({ pid, title, session = process.env.XDG_SESSI
     // `search` sale con 1 cuando no encuentra nada: no hay ventana de ese proceso.
     throw fail('window-not-found', `no window of process ${pid}`)
   }
-  // De las ventanas del proceso, la que tiene ese título (un proceso puede tener varias).
+  /** @type {Array<{ id: string, name: string, x?: number, y?: number, w?: number, h?: number }>} */
+  const cands = []
   for (const id of ids) {
-    let name = ''
-    try { name = (await exec('xdotool', ['getwindowname', id])).trim() } catch (_) { continue }
-    if (name === title) {
-      await exec('xdotool', ['windowactivate', id])
-      return { window: id }
-    }
+    try {
+      const out = await exec('xdotool', ['getwindowname', id, 'getwindowgeometry', '--shell', id])
+      const [name = '', ...rest] = out.split('\n')
+      /** @type {Record<string, number>} */
+      const kv = {}
+      for (const l of rest) { const m = /^([A-Z]+)=(-?\d+)$/.exec(l.trim()); if (m) kv[m[1]] = Number(m[2]) }
+      cands.push({ id, name: name.trim(), x: kv.X, y: kv.Y, w: kv.WIDTH, h: kv.HEIGHT })
+    } catch (_) { /* una ventana que se cerró mientras se miraba */ }
   }
-  throw fail('window-not-found', `no window titled "${title.slice(0, 60)}" in process ${pid}`)
+  const win = pickWindow(cands, title, rect)
+  if (!win) throw fail('window-not-found', `no window like "${title.slice(0, 60)}" in process ${pid}`)
+  await exec('xdotool', ['windowactivate', win])
+  return { window: win }
 }
 
 /**

@@ -203,7 +203,8 @@ export function serveSession (session, desktop, { log = () => {}, route = async 
           if (!int(id)) return fail('bad-input', 'raise needs a window id')
           const win = desktop.scene.wins.find((w) => w.id === id)
           if (!win) return fail('window-not-found', `no window ${id} in the scene`)
-          await raiseWindow({ pid: await desktop.pidOf(id), title: win.name })
+          const node = desktop.scene.nodes.find((n) => n.id === id)
+          await raiseWindow({ pid: await desktop.pidOf(id), title: win.name, rect: node ? { x: node.x, y: node.y, w: node.w, h: node.h } : null })
           return
         }
         case 'key':
