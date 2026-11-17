@@ -66,17 +66,34 @@ export function isKey (f) {
   return false
 }
 
-/** Los argumentos de ffmpeg para ese rectángulo. @param {{ x: number, y: number, w: number, h: number }} r @param {string} display */
-export function ffmpegArgs (r, display) {
+/**
+ * Los dos perfiles. Por el proxio o el TURN de Dotrino la imagen va, pero MUY conservadora
+ * (dueño, 2026-11-16: «la imagen sí debe ir por proxy, pero mucho más conservador que directa»):
+ * un cuarto de los píxeles, 3 cuadros por segundo y un tope de datos bajo.
+ */
+export const PROFILES = /** @type {const} */ ({
+  direct: { fps: FPS, scale: 1, bitrate: '800k', maxrate: '1200k', bufsize: '600k' },
+  relay: { fps: 3, scale: 0.5, bitrate: '120k', maxrate: '150k', bufsize: '150k' }
+})
+
+/**
+ * Los argumentos de ffmpeg para ese rectángulo.
+ * @param {{ x: number, y: number, w: number, h: number }} r @param {string} display
+ * @param {keyof typeof PROFILES} [profile]
+ */
+export function ffmpegArgs (r, display, profile = 'direct') {
+  const p = PROFILES[profile]
+  // Reducir deja los lados pares (H.264 con 4:2:0 los quiere así).
+  const filters = p.scale < 1 ? `mpdecimate,scale=trunc(iw*${p.scale}/2)*2:trunc(ih*${p.scale}/2)*2` : 'mpdecimate'
   return [
     '-hide_banner', '-loglevel', 'error', '-nostdin',
-    '-f', 'x11grab', '-framerate', String(FPS), '-video_size', `${r.w}x${r.h}`, '-i', `${display}+${r.x},${r.y}`,
+    '-f', 'x11grab', '-framerate', String(p.fps), '-video_size', `${r.w}x${r.h}`, '-i', `${display}+${r.x},${r.y}`,
     // SOLO LO QUE CAMBIA (dueño, 2026-11-16): mpdecimate tira los cuadros iguales al anterior
     // ANTES de codificar, y con vfr no se rellenan. Una pantalla quieta no manda nada.
-    '-vf', 'mpdecimate', '-fps_mode', 'vfr',
+    '-vf', filters, '-fps_mode', 'vfr',
     '-c:v', 'libx264', '-preset', 'ultrafast', '-tune', 'zerolatency', '-profile:v', 'baseline',
-    '-pix_fmt', 'yuv420p', '-g', String(GOP), '-bf', '0', '-x264-params', 'aud=1',
-    '-b:v', '800k', '-maxrate', '1200k', '-bufsize', '600k',
+    '-pix_fmt', 'yuv420p', '-g', String(p.fps * 2), '-bf', '0', '-x264-params', 'aud=1',
+    '-b:v', p.bitrate, '-maxrate', p.maxrate, '-bufsize', p.bufsize,
     '-f', 'h264', '-'
   ]
 }
@@ -101,14 +118,15 @@ export function makeVideo ({ log = () => {}, spawn = nodeSpawn, session = proces
    * @param {{ x: number, y: number, w: number, h: number }} r  ya par y dentro de la pantalla (evenRect)
    * @param {(f: { key: boolean, data: Uint8Array }) => void} onFrame
    * @param {(e: Error & { code: string }) => void} onError
+   * @param {keyof typeof PROFILES} [profile]
    */
-  function start (r, onFrame, onError) {
+  function start (r, onFrame, onError, profile = 'direct') {
     if (session === 'wayland') { onError(fail('no-video', 'video of a window is X11 only for now')); return }
-    const key = `${r.x},${r.y},${r.w},${r.h}`
+    const key = `${r.x},${r.y},${r.w},${r.h},${profile}`
     if (proc && key === current) return
     stop()
     current = key
-    const p = spawn('ffmpeg', ffmpegArgs(r, display), { stdio: ['ignore', 'pipe', 'pipe'] })
+    const p = spawn('ffmpeg', ffmpegArgs(r, display, profile), { stdio: ['ignore', 'pipe', 'pipe'] })
     proc = p
     let pending = new Uint8Array(0)
     let errText = ''

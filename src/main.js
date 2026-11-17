@@ -80,6 +80,7 @@ const M = {
     err_no_video: 'Esa máquina no puede enviar la imagen de esta ventana (le falta ffmpeg, o usa Wayland).',
     err_old_agent: 'Esa máquina tiene una versión anterior del escritorio remoto: actualízala para ver la imagen de las ventanas y traerlas al frente.',
     video_wait: 'La imagen de esta ventana solo viaja por conexión directa entre tus aparatos. Esperando a que se abra…',
+    video_low: 'Imagen reducida: tus aparatos no están conectados directamente, y así gasta menos.',
     error: 'Error: '
   },
   en: {
@@ -126,6 +127,7 @@ const M = {
     err_no_video: 'That machine cannot send the picture of this window (it lacks ffmpeg, or uses Wayland).',
     err_old_agent: 'That machine runs an older version of the remote desktop: update it to see the picture of windows and bring them to the front.',
     video_wait: 'The picture of this window only travels over a direct connection between your devices. Waiting for it to open…',
+    video_low: 'Reduced picture: your devices are not connected directly, so it uses less data.',
     error: 'Error: '
   }
 }
@@ -696,7 +698,14 @@ function desktopScreen (link, sub, name = '') {
           }
           return
         }
-        if (p.type === 'vframe') { if (p.id === videoId) { status.textContent = ''; videoLayer.frame(p) } return }
+        if (p.type === 'vframe') {
+          if (p.id !== videoId) return
+          // Por el proxio la imagen va reducida (un cuarto de los píxeles, 3 por segundo): se dice.
+          const msg = p.q === 'relay' ? t('video_low') : ''
+          if (status.textContent !== msg) status.textContent = msg
+          videoLayer.frame(p)
+          return
+        }
         if (p.type === 'vwait') { if (p.id === videoId) { videoLayer.stopLive(); status.textContent = t('video_wait') } return }
         if (p.type === 'fail') status.textContent = errorText(p)
       })

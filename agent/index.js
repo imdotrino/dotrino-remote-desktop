@@ -28,8 +28,8 @@
  *                                         `id: null` lo para. Sigue al nodo si se mueve.
  *   agente → cliente:
  *     { type:'scene', seq, screen, wins, nodes } · { type:'patch', seq, base, … } (scene.js)
- *     { type:'vframe', id, seq, key, rect, data }   un cuadro H.264 (Annex B, base64) de ese rectángulo
- *     { type:'vwait', id, route }         no hay vídeo por este camino (la red de Dotrino): espera al directo
+ *     { type:'vframe', id, seq, key, rect, q, data }   un cuadro H.264 (Annex B, base64) de ese rectángulo;
+ *                                         `q`: 'direct' (calidad completa) o 'relay' (reducido, por el proxio)
  *     { type:'fail', code, message }
  *
  * Quién puede: cualquier aparato de tu cuenta con `sign` en el acta, igual que la terminal
@@ -94,22 +94,23 @@ export function serveSession (session, desktop, { log = () => {}, route = async 
   /** @type {number | null} */
   let videoId = null
   let vseq = 0
-  // EL VÍDEO NO PASA POR LA RED DE DOTRINO (regla del dueño, 2026-11-01): su proxio y su TURN no
-  // llevan los bytes pesados de los usuarios, ni preguntando. Solo por un camino sin nadie en
-  // medio. Por el proxio el hueco dice que espera la conexión directa, y se mira cada poco.
-  const VIDEO_ROUTES = new Set(['direct', 'socket', 'bluetooth'])
+  // EL VÍDEO SEGÚN EL CAMINO: directo (sin nadie en medio) va a calidad completa; por el proxio o
+  // el TURN de Dotrino va MUY conservador (dueño, 2026-11-16, que matiza la regla del 2026-11-01:
+  // «la imagen sí debe ir por proxy, pero mucho más conservador que directa»). Se mira cada poco
+  // por dónde va la sesión, y si cambia, la captura se rehace con el otro perfil.
+  const DIRECT_ROUTES = new Set(['direct', 'socket', 'bluetooth'])
   /** @type {string | null} */
   let videoRoute = null
   /** @type {ReturnType<typeof setInterval> | null} */
   let routeTimer = null
+  /** @returns {'direct' | 'relay'} */
+  const profile = () => (videoRoute && DIRECT_ROUTES.has(videoRoute) ? 'direct' : 'relay')
   const checkRoute = async () => {
     let r = 'proxy'
     try { r = await route() } catch (_) {}
     if (r === videoRoute) return
     videoRoute = r
-    if (videoId == null) return
-    if (VIDEO_ROUTES.has(r)) syncVideo()
-    else { video.stop(); session.send({ type: 'vwait', id: videoId, route: r }) }
+    if (videoId != null) syncVideo()
   }
   const watchRoute = (/** @type {boolean} */ on) => {
     if (on && !routeTimer) { routeTimer = setInterval(() => { checkRoute() }, 3000); routeTimer.unref?.() }
@@ -119,15 +120,16 @@ export function serveSession (session, desktop, { log = () => {}, route = async 
   /** Arranca (o rehace, si el nodo se movió) la captura del nodo pedido. */
   const syncVideo = () => {
     if (videoId == null) { video.stop(); return }
-    if (!videoRoute || !VIDEO_ROUTES.has(videoRoute)) return
+    if (!videoRoute) return
     const scene = desktop.scene
     const n = scene.nodes.find((x) => x.id === videoId)
     const r = n ? evenRect(n, scene.screen) : null
     if (!r) { video.stop(); return }
     const id = videoId
+    const q = profile()
     video.start(r,
-      ({ key, data }) => { session.send({ type: 'vframe', id, seq: vseq++, key, rect: r, data: Buffer.from(data).toString('base64') }) },
-      (e) => { videoId = null; failWith(e) })
+      ({ key, data }) => { session.send({ type: 'vframe', id, seq: vseq++, key, rect: r, q, data: Buffer.from(data).toString('base64') }) },
+      (e) => { videoId = null; failWith(e) }, q)
   }
 
   /** El lector, o un fallo dicho: sin nadie mirando no hay a quién mandarle el clic. */
