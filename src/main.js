@@ -532,6 +532,8 @@ function desktopScreen (link, sub, name = '') {
     watch = what
     follow()
     showWins()
+    // Cambiar de ventana o de pantalla lleva el ratón a su centro (dueño, 2026-11-17).
+    mouseToCenter()
     // Elegir una ventana es querer trabajar en ella: se trae al frente, con el foco, en la máquina.
     if (typeof watch === 'number' && !isMonitor(watch)) send({ type: 'raise', id: watch })
   }
@@ -768,6 +770,16 @@ function desktopScreen (link, sub, name = '') {
     cursor.x = Math.max(0, Math.min(scene.screen.w - 1, (stage.clientWidth / 2 - tx) / k))
     cursor.y = Math.max(0, Math.min(scene.screen.h - 1, (stage.clientHeight / 2 - ty) / k))
     cursor.placed = true
+  }
+  /** El ratón (el puntero de aquí y el de la máquina) al centro de lo que se mira. */
+  function mouseToCenter () {
+    if (!scene) return
+    const r = rectOf(targetId() ?? undefined) || { x: 0, y: 0, w: scene.screen.w, h: scene.screen.h }
+    cursor.x = Math.max(0, Math.min(scene.screen.w - 1, r.x + r.w / 2))
+    cursor.y = Math.max(0, Math.min(scene.screen.h - 1, r.y + r.h / 2))
+    cursor.placed = true
+    placeCursor()
+    sendMove()
   }
   function applyTouchMode () {
     cursorG.style.display = touchMode === 'mouse' ? '' : 'none'
