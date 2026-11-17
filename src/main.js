@@ -793,6 +793,9 @@ function desktopScreen (link, sub, name = '') {
     b.addEventListener('click', () => {
       touchMode = /** @type {HTMLElement} */ (b).dataset.mode === 'mouse' ? 'mouse' : 'pan'
       try { localStorage.setItem(TOUCH_KEY, touchMode) } catch {}
+      // Encender el modo ratón lo trae al centro de lo que se ve, aquí y en la máquina (dueño,
+      // 2026-11-17), como al cambiar de ventana.
+      if (touchMode === 'mouse') { centerCursor(); sendMove() }
       applyTouchMode()
     })
   }
