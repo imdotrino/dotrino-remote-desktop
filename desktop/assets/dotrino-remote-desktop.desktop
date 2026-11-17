@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Name=Dotrino Remote Desktop
+GenericName=Remote desktop
+GenericName[es]=Escritorio remoto
+Comment=See and use the desktops of your other machines
+Comment[es]=Ve y usa los escritorios de tus otras máquinas
+Exec=dotrino-remote-desktop
+Icon=dotrino-remote-desktop
+Terminal=false
+Categories=Network;RemoteAccess;
+Keywords=remote;desktop;vnc;control;
+StartupWMClass=dotrino-remote-desktop

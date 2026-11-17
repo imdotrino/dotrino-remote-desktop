@@ -53,7 +53,15 @@ fn main() -> iced::Result {
         .font(fonts::QUICKSAND_BOLD)
         .font(fonts::COMFORTAA)
         .default_font(BODY)
-        .window(window::Settings { size: Size::new(1200.0, 800.0), min_size: Some(Size::new(560.0, 420.0)), icon, ..Default::default() })
+        .window(window::Settings {
+            size: Size::new(1200.0, 800.0),
+            min_size: Some(Size::new(560.0, 420.0)),
+            icon,
+            // Linux: la clase de la ventana, para que el escritorio la ate al .desktop (su icono).
+            #[cfg(target_os = "linux")]
+            platform_specific: window::settings::PlatformSpecific { application_id: "dotrino-remote-desktop".into(), ..Default::default() },
+            ..Default::default()
+        })
         .run()
 }
 

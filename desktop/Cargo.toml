@@ -26,3 +26,18 @@ openh264 = "0.9.10"
 lto = "thin"
 codegen-units = 1
 strip = true
+
+[package.metadata.deb]
+name = "dotrino-remote-desktop"
+maintainer = "Dotrino <sandrade@dotrino.com>"
+section = "net"
+# La ventana carga estas librerías al arrancar (no enlazadas: `$auto` no las ve). Sin ellas la
+# app no abre en un sistema mínimo.
+depends = "$auto, libxcursor1, libxi6, libxrandr2, libxkbcommon0, libxkbcommon-x11-0, libwayland-client0"
+extended-description = "The window talks to the agent of this machine (npm: @dotrino/remote-desktop-agent). Install it with: npm install -g @dotrino/remote-desktop-agent"
+assets = [
+  ["target/release/dotrino-remote-desktop", "usr/bin/", "755"],
+  ["assets/dotrino-remote-desktop.desktop", "usr/share/applications/", "644"],
+  ["assets/icon.svg", "usr/share/icons/hicolor/scalable/apps/dotrino-remote-desktop.svg", "644"],
+  ["assets/icon-512.png", "usr/share/icons/hicolor/512x512/apps/dotrino-remote-desktop.png", "644"],
+]

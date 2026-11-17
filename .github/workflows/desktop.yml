@@ -1,0 +1,42 @@
+# Publica la app de escritorio (la carpeta desktop/, Rust) DESDE CI: un .deb para Linux, con la
+# versión en el nombre (CONVENCIONES §11.5) y atestiguado, para que quien lo baje pueda
+# verificarlo (§15). Receta de dotrino-terminal/.github/workflows/desktop.yml.
+#
+# Se dispara con un tag `desktop-vX.Y.Z` (el agente va por `agent-v*`, la PWA por cada push).
+name: Release desktop
+
+on:
+  push:
+    tags: ['desktop-v*']
+
+permissions:
+  contents: write      # crear la release y subirle el archivo
+  id-token: write      # OIDC: la atestación
+  attestations: write
+
+jobs:
+  linux:
+    # 22.04 y no latest: el .deb pide la glibc con la que se compila, y así instala también en
+    # sistemas de hace unos años (Ubuntu 22.04, Debian 12).
+    runs-on: ubuntu-22.04
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with: { workspaces: desktop }
+      - run: cargo build --release --locked
+      - run: cargo install cargo-deb --locked
+      - run: cargo deb --no-build
+      - run: mkdir -p dist && cp target/debian/*.deb dist/
+      - uses: actions/attest-build-provenance@v1
+        with:
+          subject-path: desktop/dist/*.deb
+      - name: Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || gh release create "$GITHUB_REF_NAME" --latest=false --title "Dotrino Remote Desktop (escritorio) ${GITHUB_REF_NAME#desktop-v}" --notes "Necesita el agente en esta máquina: npm install -g @dotrino/remote-desktop-agent"
+          gh release upload "$GITHUB_REF_NAME" dist/*.deb --clobber

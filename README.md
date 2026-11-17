@@ -86,7 +86,7 @@ puntas.
   máquinas, la escena dibujada en un lienzo, barra de tareas, ratón y teclado, zoom, el vídeo de los
   huecos (OpenH264) y la clave de la máquina. No sabe de llaves ni de red: todo pasa por el agente
   local. `--name <n>` elige el agente si hay varios; `--this-machine` abre esta misma máquina solo
-  para ver (prueba).
+  para ver (prueba). Sale como `.deb` en las releases `desktop-v*` (`.github/workflows/desktop.yml`).
 
 ## Desarrollo
 
