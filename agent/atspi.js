@@ -82,18 +82,46 @@ const HOLE_ROLES = new Set(['canvas', 'drawing area', 'image', 'video', 'animati
  * trae AT-SPI). Son errores con código, para decirle a la persona cuál de las dos cosas pasa.
  */
 export async function openA11yBus () {
-  const session = await openSessionBus()
+  const session = await deadline(openSessionBus(), 'connecting to the session bus')
   if (!session) throw Object.assign(new Error('no session bus: this machine has no desktop session'), { code: 'no-session-bus' })
+  timed(session)
   try {
     const [addr] = await session.call({ destination: 'org.a11y.Bus', path: '/org/a11y/bus', iface: 'org.a11y.Bus', member: 'GetAddress' })
-    const bus = await openBus(addr)
+    const bus = await deadline(openBus(String(addr)), 'connecting to the accessibility bus')
     if (!bus) throw Object.assign(new Error(`the accessibility bus is not reachable at ${addr}`), { code: 'no-a11y-bus' })
-    return { session, bus }
+    return { session, bus: timed(bus) }
   } catch (e) {
     session.close()
-    if (e instanceof DBusError) throw Object.assign(new Error('the desktop has no accessibility service (at-spi2-core)'), { code: 'no-a11y-bus' })
+    if (e instanceof DBusError && e.dbusName !== NO_REPLY) throw Object.assign(new Error('the desktop has no accessibility service (at-spi2-core)'), { code: 'no-a11y-bus' })
     throw e
   }
+}
+
+/**
+ * NINGUNA LLAMADA ESPERA PARA SIEMPRE. Una app colgada no contesta a la accesibilidad, y el bus no
+ * tiene tope: el agente se quedaba esperando, y como las lecturas van de una en una, ninguna
+ * tableta volvía a recibir la escena hasta reiniciarlo (2026-11-17). Pasado `CALL_MS` la llamada
+ * falla con el `NoReply` de D-Bus, que el lector ya trata como una app que no está.
+ */
+export const CALL_MS = 5000
+const NO_REPLY = 'org.freedesktop.DBus.Error.NoReply'
+/** @template T @param {Promise<T>} p @param {string} what @param {number} [ms] @returns {Promise<T>} */
+function deadline (p, what, ms = CALL_MS) {
+  return new Promise((resolve, reject) => {
+    const t = setTimeout(() => reject(new DBusError(NO_REPLY, `${what}: no answer in ${ms / 1000} s`)), ms)
+    p.then((v) => { clearTimeout(t); resolve(v) }, (e) => { clearTimeout(t); reject(e) })
+  })
+}
+/**
+ * Pone el tope a todas las llamadas de una conexión (también las que hace ella misma, `addMatch`).
+ * @template {{ call: import('@dotrino/proxy-client/dbus').DBusConnection['call'] }} C
+ * @param {C} conn @param {number} [ms]
+ * @returns {C}
+ */
+export function timed (conn, ms = CALL_MS) {
+  const call = conn.call.bind(conn)
+  conn.call = (m) => deadline(call(m), `${m.member} on ${m.destination}`, ms)
+  return conn
 }
 
 /**
