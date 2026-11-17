@@ -76,6 +76,12 @@ const M = {
     demo_note: 'Ejemplo: no está conectado a ninguna máquina.',
     err_unauthorized: (r) => `No autorizado: ${r}`,
     err_blocked: 'Un aprobador bloqueó este aparato; se desbloquea en la bóveda.',
+    err_missing_cap: (c) => `Este aparato no tiene el permiso «${c}». Dáselo en tu bóveda: dotrino-vault caps <ID> +${c}`,
+    code_needed: (n) => `${n} pide su clave.`,
+    code_label: 'Clave de la máquina',
+    code_send: 'Entrar',
+    code_bad: 'Clave incorrecta.',
+    code_wait: (s) => `Demasiados intentos: espera ${s} s.`,
     err_no_desktop: 'Esa máquina no tiene una sesión de escritorio abierta.',
     err_no_a11y: 'Esa máquina no tiene el servicio de accesibilidad del escritorio (at-spi2-core).',
     err_no_raise: 'Esa máquina no deja traer ventanas al frente desde aquí: la ves, pero puede estar tapada por otra.',
@@ -127,6 +133,12 @@ const M = {
     demo_note: 'Example: not connected to any machine.',
     err_unauthorized: (r) => `Not authorized: ${r}`,
     err_blocked: 'An approver blocked this device; unblock it in the vault.',
+    err_missing_cap: (c) => `This device lacks the «${c}» permission. Grant it in your vault: dotrino-vault caps <ID> +${c}`,
+    code_needed: (n) => `${n} asks for its code.`,
+    code_label: 'Machine code',
+    code_send: 'Enter',
+    code_bad: 'Wrong code.',
+    code_wait: (s) => `Too many tries: wait ${s} s.`,
     err_no_desktop: 'That machine has no desktop session open.',
     err_no_a11y: 'That machine has no desktop accessibility service (at-spi2-core).',
     err_no_raise: 'That machine does not let windows be brought to the front from here: you see it, but another may cover it.',
@@ -173,7 +185,11 @@ function $ (root, sel) {
 /** Un error del agente, en palabras de la persona: por su `code`. @param {unknown} err */
 function errorText (err) {
   const e = /** @type {AgentError | null | undefined} */ (err)
+  // Le falta el permiso del producto (`desktop`): se dice cuál y cómo se da.
+  if (e?.code === 'unauthorized' && e.reason === 'missing-cap') return t('err_missing_cap', 'desktop')
   if (e?.code === 'unauthorized') return t('err_unauthorized', e.reason || '?')
+  if (e?.code === 'bad-code') return t('code_bad')
+  if (e?.code === 'wait') return t('code_wait', Math.ceil((Number(/** @type {{ retryMs?: number }} */ (e).retryMs) || 0) / 1000))
   if (e?.code === 'blocked') return t('err_blocked')
   if (e?.code === 'no-session-bus') return t('err_no_desktop')
   if (e?.code === 'no-a11y-bus') return t('err_no_a11y')
@@ -304,6 +320,7 @@ function desktopScreen (link, sub, name = '') {
       ${demo ? '' : `<button class="btn" data-testid="disconnect">${t('disconnect')}</button>`}
     </div>
     <p class="status" data-testid="desktop-status">${demo ? t('demo_note') : t('connecting', esc(name))}</p>
+    <form class="unlock" data-testid="unlock" hidden><input type="password" autocomplete="off" data-testid="unlock-code" aria-label="${t('code_label')}" placeholder="${t('code_label')}"><button class="btn" data-testid="unlock-send">${t('code_send')}</button></form>
     <div class="stage"><svg class="screen" data-testid="screen" preserveAspectRatio="xMidYMin meet"></svg></div>
     <input class="hscroll" type="range" min="0" max="1000" value="0" data-testid="hscroll" aria-label="${t('hscroll')}" hidden>
     <nav class="taskbar" data-testid="taskbar" aria-label="${t('taskbar')}"></nav>
@@ -813,6 +830,18 @@ function desktopScreen (link, sub, name = '') {
   const SCENE_WAIT_MS = 8000
   const MAX_TRIES = 3
   let gotScene = false
+  // LA CLAVE DE LA MÁQUINA (si tiene): se pide aquí y se guarda solo en memoria, para volver a
+  // escribirla sola si la sesión se rehace. Nunca va al almacén.
+  const unlockForm = /** @type {HTMLFormElement} */ ($(node, '.unlock'))
+  const unlockInput = /** @type {HTMLInputElement} */ ($(node, '[data-testid=unlock-code]'))
+  /** @type {string | null} */
+  let machineCode = null
+  const askCode = () => { unlockForm.hidden = false; unlockInput.value = ''; unlockInput.focus() }
+  unlockForm.addEventListener('submit', (ev) => {
+    ev.preventDefault()
+    machineCode = unlockInput.value
+    send({ type: 'unlock', code: machineCode })
+  })
   /** @param {number} attempt */
   async function connectOnce (attempt) {
     try {
@@ -844,6 +873,16 @@ function desktopScreen (link, sub, name = '') {
           return
         }
         if (p.type === 'vwait') { if (p.id === videoId) { videoLayer.stopLive(); status.textContent = t('video_wait') } return }
+        if (p.type === 'unlocked') { unlockForm.hidden = true; status.textContent = t('connecting', name); send({ type: 'scene' }); if (videoId != null) requestVideo(0); return }
+        if (p.type === 'fail' && (p.code === 'locked' || p.code === 'bad-code' || p.code === 'wait')) {
+          // Mientras se pide la clave no llega la escena, y eso no es un canal muerto.
+          if (sceneWatch) { clearTimeout(sceneWatch); sceneWatch = null }
+          if (p.code === 'locked' && machineCode != null) { send({ type: 'unlock', code: machineCode }); return }
+          if (p.code !== 'locked') machineCode = null
+          status.textContent = p.code === 'locked' ? t('code_needed', name) : errorText(p)
+          askCode()
+          return
+        }
         if (p.type === 'fail') status.textContent = errorText(p)
       })
       client.on('error', (/** @type {unknown} */ e) => { if (client === rc) status.textContent = errorText(e) })

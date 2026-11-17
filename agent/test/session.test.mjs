@@ -2,9 +2,13 @@
 // parches siguen, lo que llega mal se contesta con su code y los clics llegan al lector.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
 import { serveSession } from '../index.js'
+import { makeGate, setAccessCode } from '@dotrino/remote-agent/access'
 
-function fakes () {
+function fakes (gate = null) {
   const calls = []
   let onPatch = null
   let watching = false
@@ -21,7 +25,7 @@ function fakes () {
   const h = { message: [], close: [] }
   const sent = []
   const session = { send: (p) => sent.push(p), on: (ev, cb) => h[ev].push(cb) }
-  serveSession(session, /** @type {any} */ (desktop))
+  serveSession(session, /** @type {any} */ (desktop), { gate })
   const say = async (m) => { await h.message[0](m) }
   return { calls, sent, say, patch: (p) => onPatch(p), close: () => h.close[0](), isWatching: () => watching }
 }
@@ -73,4 +77,22 @@ test('al cerrarse la sesión deja de mirar', async () => {
   await f.say({ type: 'scene' })
   f.close()
   assert.equal(f.isWatching(), false)
+})
+
+test('con clave en la máquina, nada se ve ni se toca hasta escribirla', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rd-lock-'))
+  setAccessCode(dir, '4821')
+  const f = fakes(makeGate(dir))
+  await f.say({ type: 'scene' })
+  assert.equal(f.sent.at(-1).code, 'locked')
+  assert.equal(f.isWatching(), false, 'no se empezó a mirar el escritorio')
+  await f.say({ type: 'click', x: 1, y: 2 })
+  assert.equal(f.calls.length, 0)
+  await f.say({ type: 'unlock', code: 'nope' })
+  assert.equal(f.sent.at(-1).code, 'bad-code')
+  await f.say({ type: 'unlock', code: '4821' })
+  assert.equal(f.sent.at(-1).type, 'unlocked')
+  await f.say({ type: 'scene' })
+  assert.equal(f.sent.at(-1).type, 'scene')
+  fs.rmSync(dir, { recursive: true, force: true })
 })

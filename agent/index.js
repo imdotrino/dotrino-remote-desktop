@@ -38,6 +38,7 @@
  */
 import { createRequire } from 'node:module'
 import { startRemoteAgent } from '@dotrino/remote-agent/agent'
+import { makeGate, makeLock } from '@dotrino/remote-agent/access'
 import { dataDir, loadLink, LABEL } from './link.js'
 import { makeDesktop } from './desktop.js'
 import { raiseWindow } from './raise.js'
@@ -74,11 +75,14 @@ const int = (v) => Number.isInteger(v)
  * Atiende una sesión de otro aparato. Exportada para las pruebas.
  * @param {SessionLike} session
  * @param {ReturnType<typeof makeDesktop>} desktop
- * @param {{ log?: (m: string) => void, route?: () => Promise<string> }} [opts]
+ * @param {{ log?: (m: string) => void, route?: () => Promise<string>, gate?: ReturnType<typeof makeGate> | null }} [opts]
  *   `route`: por dónde va esta sesión ahora (`routeTo` del pilar). El vídeo solo sale por un
  *   camino que no es la red de Dotrino.
+ *   `gate`: la clave de la máquina (`@dotrino/remote-agent/access`), si tiene. Hasta escribirla
+ *   no se ve ni se toca nada.
  */
-export function serveSession (session, desktop, { log = () => {}, route = async () => 'direct' } = {}) {
+export function serveSession (session, desktop, { log = () => {}, route = async () => 'direct', gate = null } = {}) {
+  const lock = makeLock({ gate, device: /** @type {{ device?: string }} */ (session).device || null, send: (m) => session.send(m) })
   /** @type {(() => void) | null} */
   let unwatch = null
   /** @type {(code: string, message: string) => void} */
@@ -141,6 +145,9 @@ export function serveSession (session, desktop, { log = () => {}, route = async 
 
   session.on('message', async (raw) => {
     if (!raw || typeof raw !== 'object') return
+    // La clave de la máquina, antes que nada: sin ella no se ve la pantalla ni se toca.
+    if (lock.handle(raw)) return
+    if (!lock.mayPass()) return
     // Lo que llega es JSON de otro aparato: cada campo se comprueba antes de usarlo.
     const msg = /** @type {Record<string, unknown>} */ (raw)
     const { x, y, dy, id, index, text, keysym, double } = msg
@@ -249,8 +256,21 @@ export async function startAgent (opts = {}) {
   /** @type {RemoteAgent | null} */
   let remote = null
   let stopped = false
+  // TRES CLAVES MAL SEGUIDAS DE UN MISMO APARATO: se reporta a la bóveda, que se lo pone a quien
+  // aprueba (bloquear o ignorar). El freno local ya está puesto; esto es el aviso.
+  const gate = makeGate(dir, {
+    onIncident: ({ device, tries }) => {
+      if (!remote?.reportIncident) return
+      remote.reportIncident({ kind: 'bad-code', about: device, tries })
+        .then(() => log(`incident reported: ${tries} wrong codes`))
+        .catch((e) => log(`could not report the incident: ${e.message}`))
+    }
+  })
   const startRemote = () => startRemoteAgent({
     label: LABEL,
+    // Solo quien tenga `desktop` en el acta usa el escritorio (auditoría del 2026-11-16): con
+    // `sign` bastaba, y cualquier aparato de la cuenta —un bot, un navegador prestado— entraba.
+    needs: ['desktop'],
     product: LABEL,
     version: VERSION,
     dir,
@@ -260,6 +280,7 @@ export async function startAgent (opts = {}) {
     onRevoked: () => { desktop.stop().catch(() => {}); opts.onRevoked?.() },
     onSession: (session) => serveSession(session, desktop, {
       log,
+      gate,
       route: async () => {
         const c = /** @type {{ routeTo?: (t: string) => Promise<string> } | undefined} */ (remote?.client)
         const from = /** @type {{ from?: string }} */ (session).from

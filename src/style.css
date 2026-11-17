@@ -84,3 +84,7 @@ a { color: var(--dt-accent); text-underline-offset: 3px; }
 @keyframes vspin { to { transform: rotate(360deg); } }
 /* El punto: la ventana con el foco en la máquina (lo que se mira va resaltado aparte). */
 .task.focus::before { content: ''; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--dt-ok); margin-right: 6px; vertical-align: middle; }
+
+.unlock { display: flex; gap: 8px; margin: 0 0 8px; }
+.unlock input { flex: 1; min-width: 0; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--dt-border, #8884); background: var(--dt-surface, transparent); color: inherit; font: inherit; }
+.unlock[hidden] { display: none; }

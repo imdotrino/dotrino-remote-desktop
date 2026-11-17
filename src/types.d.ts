@@ -15,4 +15,5 @@ export type AgentMessage =
   | ({ type: 'patch' } & Patch)
   | { type: 'vframe', id: number, seq: number, key: boolean, rect: Rect, q?: 'direct' | 'relay', data: string }
   | { type: 'vwait', id: number, route: string }
-  | { type: 'fail', code: string, message: string }
+  | { type: 'fail', code: string, message: string, retryMs?: number }
+  | { type: 'unlocked' }

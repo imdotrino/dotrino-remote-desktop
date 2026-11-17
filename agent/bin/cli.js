@@ -11,6 +11,7 @@
  *   dotrino-remote-desktop-agent service install|uninstall|status [--name <n>]
  *                                                      arrancar solo con tu sesión (service.js)
  *   dotrino-remote-desktop-agent supervise --name <n>  lo lanza el inicio automático del escritorio
+ *   dotrino-remote-desktop-agent lock [--off|--status] [--name <n>]  la clave de esta máquina
  *
  * Tiene que correr DENTRO de la sesión gráfica del usuario (necesita su bus de sesión y el de
  * accesibilidad): un servicio de usuario de systemd o el arranque automático del escritorio,
@@ -28,6 +29,7 @@ import { realpathSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import { service } from '../service.js'
+import { lockCommand } from '@dotrino/remote-agent/access'
 
 /** @type {{ version: string }} */
 const { version: VERSION } = createRequire(import.meta.url)('../package.json')
@@ -50,6 +52,11 @@ if (args.includes('-h') || args.includes('--help')) {
                                                                vuelve a levantar si se cae
   dotrino-remote-desktop-agent service uninstall [--name <n>]  lo quita (para el agente)
   dotrino-remote-desktop-agent service status [--name <n>]     dice si está puesto y si está corriendo
+  dotrino-remote-desktop-agent lock [--name <n>]               pone o cambia la clave de esta máquina:
+                                                               tus otros aparatos la escriben para entrar
+  dotrino-remote-desktop-agent lock --off | --status           la quita, o dice si hay
+
+Entra solo un aparato de tu cuenta con el permiso «desktop»: dotrino-vault caps <ID> +desktop
   opciones: [--name <n>] [--proxy <wss://…>] [--dir <ruta>]
            [--no-a11y]  no encender la accesibilidad del escritorio al mirar
 
@@ -104,6 +111,14 @@ if (cmd === 'supervise') {
   try {
     if (service.superviseCommand({ name, dir: dataDir(name), cli: CLI }).relaunched) process.exit(0)
   } catch (e) { die(e) }
+}
+
+// `lock`: la clave de esta máquina (`@dotrino/remote-agent/access`). Vale al momento.
+if (cmd === 'lock') {
+  try {
+    console.log(await lockCommand({ dir: opt('--dir') || dataDir(opt('--name')), args, lang: 'es', what: { es: 'usar el escritorio', en: 'use the desktop' } }))
+  } catch (e) { die(e) }
+  process.exit(0)
 }
 
 if (cmd === 'service') {
