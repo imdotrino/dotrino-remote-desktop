@@ -58,6 +58,7 @@ const M = {
     machine_offline: 'Desconectada',
     connecting: (n) => `Conectando con ${n}…`,
     conn_fail: (n) => `No se pudo conectar con ${n}.`,
+    reconnecting: (n) => `No llega nada de ${n}: conectando otra vez…`,
     all_screen: 'Todo el escritorio',
     active_win: 'Ventana activa',
     active_short: 'Activa',
@@ -106,6 +107,7 @@ const M = {
     machine_offline: 'Offline',
     connecting: (n) => `Connecting to ${n}…`,
     conn_fail: (n) => `Could not connect to ${n}.`,
+    reconnecting: (n) => `Nothing is arriving from ${n}: connecting again…`,
     all_screen: 'Whole desktop',
     active_win: 'Active window',
     active_short: 'Active',
@@ -777,15 +779,25 @@ function desktopScreen (link, sub, name = '') {
     return node
   }
   let closed = false
-  teardown = () => { closed = true; rc?.close().catch(() => {}) }
+  /** @type {ReturnType<typeof setTimeout> | null} */
+  let sceneWatch = null
+  teardown = () => { closed = true; if (sceneWatch) clearTimeout(sceneWatch); rc?.close().catch(() => {}) }
   node.querySelector('[data-testid=disconnect]')?.addEventListener('click', () => { teardown?.(); teardown = null; render() })
-  ;(async () => {
+  // SI LA ESCENA NO LLEGA, SE VUELVE A CONECTAR: un canal directo puede quedar abierto pero
+  // muerto (acepta lo que se le manda y lo pierde) y nadie se entera; la tableta se quedaba en
+  // «Conectando…» para siempre (2026-11-16). Una sesión nueva negocia un canal nuevo.
+  const SCENE_WAIT_MS = 8000
+  const MAX_TRIES = 3
+  let gotScene = false
+  /** @param {number} attempt */
+  async function connectOnce (attempt) {
     try {
       if (!link) throw Object.assign(new Error('no link to the vault'), { code: 'not-linked' })
-      rc = new RemoteAgentClient(link, { agentPubkey: sub })
-      rc.on('message', (/** @type {AgentMessage | null} */ p) => {
-        if (!p || typeof p !== 'object') return
-        if (p.type === 'scene') { status.textContent = ''; paint(p); return }
+      gotScene = false
+      const client = rc = new RemoteAgentClient(link, { agentPubkey: sub })
+      client.on('message', (/** @type {AgentMessage | null} */ p) => {
+        if (client !== rc || !p || typeof p !== 'object') return
+        if (p.type === 'scene') { gotScene = true; if (sceneWatch) clearTimeout(sceneWatch); status.textContent = ''; paint(p); return }
         if (p.type === 'patch') {
           if (!scene) return
           try {
@@ -810,16 +822,25 @@ function desktopScreen (link, sub, name = '') {
         if (p.type === 'vwait') { if (p.id === videoId) { videoLayer.stopLive(); status.textContent = t('video_wait') } return }
         if (p.type === 'fail') status.textContent = errorText(p)
       })
-      rc.on('error', (/** @type {unknown} */ e) => { status.textContent = errorText(e) })
+      client.on('error', (/** @type {unknown} */ e) => { if (client === rc) status.textContent = errorText(e) })
       // La máquina se reinició y la sesión se rehízo sola: se vuelve a pedir la escena.
-      rc.on('resumed', () => { send({ type: 'scene' }); if (videoId != null) requestVideo(0) })
-      await rc.connect()
-      if (closed) { rc.close().catch(() => {}); return }
+      client.on('resumed', () => { send({ type: 'scene' }); if (videoId != null) requestVideo(0) })
+      await client.connect()
+      if (closed) { client.close().catch(() => {}); return }
       send({ type: 'scene' })
+      if (videoId != null) requestVideo(0)
+      sceneWatch = setTimeout(() => {
+        if (closed || gotScene || client !== rc) return
+        client.close().catch(() => {})
+        if (attempt + 1 >= MAX_TRIES) { status.textContent = t('conn_fail', name); return }
+        status.textContent = t('reconnecting', name)
+        connectOnce(attempt + 1)
+      }, SCENE_WAIT_MS)
     } catch (e) {
       status.textContent = `${t('conn_fail', name)} ${errorText(e)}`
     }
-  })()
+  }
+  connectOnce(0)
   return node
 }
 
