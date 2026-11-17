@@ -87,6 +87,12 @@ a { color: var(--dt-accent); text-underline-offset: 3px; }
 .scr.on { background: var(--dt-accent); border-color: var(--dt-accent); }
 .scrs { position: relative; flex-shrink: 0; align-self: center; }
 .scrs .scr { border-radius: 0; }
+/* La barra de teclas, sobre el teclado: una fila que se desliza de lado, como la de Terminal. */
+.keybar { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; padding: 4px 0; flex-shrink: 0; }
+.keybar::-webkit-scrollbar { display: none; }
+.keybar[hidden] { display: none; }
+.kb { flex-shrink: 0; min-width: 44px; padding: 9px 10px; font: inherit; font-size: 14px; font-weight: 700; border-radius: 8px; border: 1px solid var(--dt-line); background: var(--dt-surface); color: var(--dt-text); cursor: pointer; user-select: none; touch-action: manipulation; }
+.kb.on { background: var(--dt-accent); color: var(--dt-accent-ink); border-color: var(--dt-accent); }
 .tlabel { overflow: hidden; text-overflow: ellipsis; }
 .ticon { flex-shrink: 0; width: 20px; height: 20px; }
 .tletter { display: inline-grid; place-items: center; border-radius: 6px; font-size: 12px; font-weight: 700; background: var(--dt-line); color: var(--dt-text); }

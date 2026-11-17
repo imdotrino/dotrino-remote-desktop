@@ -55,6 +55,7 @@ import { startRemoteAgent } from '@dotrino/remote-agent/agent'
 import { makeGate, makeLock } from '@dotrino/remote-agent/access'
 import { dataDir, loadLink, LABEL } from './link.js'
 import { makeDesktop } from './desktop.js'
+import { MOD_MASK } from './atspi.js'
 import { raiseWindow } from './raise.js'
 import { makeIcons } from './icon.js'
 import { makeVideo, evenRect } from './video.js'
@@ -260,7 +261,8 @@ export function serveSession (session, desktop, { log = () => {}, route = async 
         }
         case 'key':
           if (!int(keysym) || keysym <= 0) return fail('bad-input', 'key needs a keysym')
-          await reader().key({ keysym })
+          if (msg.mods !== undefined && (!Array.isArray(msg.mods) || msg.mods.length > 4 || !msg.mods.every((m) => Object.hasOwn(MOD_MASK, m)))) return fail('bad-input', 'mods must be a list of shift, ctrl, alt, super')
+          await reader().key({ keysym, mods: /** @type {Array<keyof typeof MOD_MASK>} */ (msg.mods || []) })
           return
         default:
           return fail('unknown-type', `unknown message type: ${String(msg.type).slice(0, 32)}`)

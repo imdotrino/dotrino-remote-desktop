@@ -22,6 +22,10 @@ import { openSessionBus, openBus, DBusError } from '@dotrino/proxy-client/dbus'
 const ROOT_DEST = 'org.a11y.atspi.Registry'
 const ROOT_PATH = '/org/a11y/atspi/accessible/root'
 const DEC_PATH = '/org/a11y/atspi/registry/deviceeventcontroller'
+/** Los tipos de `GenerateKeyboardEvent` (AtspiKeySynthType). */
+const KEY = { SYM: 3, STRING: 4, LOCK: 5, UNLOCK: 6 }
+/** Las máscaras de modificador de X: Shift, Control, Mod1 (Alt) y Mod4 (Super). */
+export const MOD_MASK = /** @type {const} */ ({ shift: 1, ctrl: 4, alt: 8, super: 64 })
 const I_ACC = 'org.a11y.atspi.Accessible'
 const I_COMP = 'org.a11y.atspi.Component'
 const I_TEXT = 'org.a11y.atspi.Text'
@@ -316,20 +320,24 @@ export function makeReader (bus) {
   }
 
   /**
-   * Teclado de verdad. Un texto se escribe tal cual (`KEY_STRING`); una tecla especial va por
-   * su keysym de X (`KEY_SYM`), con su pulsar y soltar si se mantiene un modificador.
-   * @param {{ text?: string, keysym?: number, press?: 'down'|'up' }} k
+   * Teclado de verdad. Un texto se escribe tal cual (`KEY_STRING`); una tecla va por su keysym de
+   * X (`KEY_SYM`). Con modificadores (Ctrl+C, Alt+Tab) se BLOQUEAN antes de la tecla y se sueltan
+   * después (`KEY_LOCKMODIFIERS`/`KEY_UNLOCKMODIFIERS`, con su máscara de X): AT-SPI no da el
+   * keycode de un keysym, y sin él no se puede «mantener pulsado» de otro modo.
+   * @param {{ text?: string, keysym?: number, mods?: Array<keyof typeof MOD_MASK> }} k
    */
   async function key (k) {
     /** @param {number} code @param {string} str @param {number} type */
     const gen = (code, str, type) => bus.call({ destination: ROOT_DEST, path: DEC_PATH, iface: 'org.a11y.atspi.DeviceEventController', member: 'GenerateKeyboardEvent', signature: 'isu', body: [code, str, type] })
-    if (typeof k.text === 'string' && k.text) return gen(0, k.text, 4)
-    if (typeof k.keysym === 'number') {
-      // KEY_SYM pulsa y suelta. Para mantener (Ctrl mientras se pulsa otra) hace falta el
-      // keycode, que AT-SPI no da desde un keysym: los modificadores van en `combo` (scene.js).
-      return gen(k.keysym, '', 3)
+    const mask = (k.mods || []).reduce((m, x) => m | MOD_MASK[x], 0)
+    if (typeof k.text === 'string' && k.text) {
+      if (mask) throw Object.assign(new Error('modifiers go with a keysym, not with text'), { code: 'bad-key' })
+      return gen(0, k.text, KEY.STRING)
     }
-    throw Object.assign(new Error('nothing to type'), { code: 'bad-key' })
+    if (typeof k.keysym !== 'number') throw Object.assign(new Error('nothing to type'), { code: 'bad-key' })
+    if (!mask) return gen(k.keysym, '', KEY.SYM)
+    await gen(mask, '', KEY.LOCK)
+    try { await gen(k.keysym, '', KEY.SYM) } finally { await gen(mask, '', KEY.UNLOCK) }
   }
 
   /**

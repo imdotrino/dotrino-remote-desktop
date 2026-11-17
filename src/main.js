@@ -67,6 +67,7 @@ const M = {
     all_short: 'Todo',
     taskbar: 'Ventanas abiertas',
     taskbar_opts: 'Cómo se ve la barra',
+    keybar: 'Teclas especiales',
     tb_both: 'Icono y nombre',
     tb_icon: 'Solo icono',
     tb_label: 'Solo nombre',
@@ -128,6 +129,7 @@ const M = {
     all_short: 'All',
     taskbar: 'Open windows',
     taskbar_opts: 'How the bar looks',
+    keybar: 'Special keys',
     tb_both: 'Icon and name',
     tb_icon: 'Icon only',
     tb_label: 'Name only',
@@ -315,6 +317,19 @@ const KEYSYMS = {
 }
 
 /**
+ * LA BARRA DE TECLAS sobre el teclado: las mismas teclas y en el mismo orden que la de Terminal
+ * (dueño, 2026-11-17). Shift, Ctrl y Alt se quedan encendidas hasta que la siguiente tecla las usa.
+ */
+const KEYBAR = ['esc', 'tab', 'shift', 'ctrl', 'alt', 'up', 'down', 'left', 'right', 'home', 'end', 'pgup', 'pgdn', '-', '/', '|', '~']
+const MODS = ['shift', 'ctrl', 'alt']
+/** @type {Record<string, string>} */
+const KEY_LABELS = { esc: 'Esc', tab: 'Tab', shift: 'Shift', ctrl: 'Ctrl', alt: 'Alt', up: '↑', down: '↓', left: '←', right: '→', home: 'Home', end: 'End', pgup: 'PgUp', pgdn: 'PgDn' }
+/** @type {Record<string, string>} la tecla de la barra → su nombre en KEYSYMS */
+const KEYBAR_SYM = { esc: 'Escape', tab: 'Tab', up: 'ArrowUp', down: 'ArrowDown', left: 'ArrowLeft', right: 'ArrowRight', home: 'Home', end: 'End', pgup: 'PageUp', pgdn: 'PageDown' }
+/** El keysym de X de un carácter: Latin-1 es su código; el resto, 0x01000000 + el código. @param {string} ch */
+const keysymOf = (ch) => { const cp = /** @type {number} */ (ch.codePointAt(0)); return cp < 0x100 ? cp : 0x01000000 + cp }
+
+/**
  * La pantalla de UN escritorio. `sub === 'demo'` enseña la escena de muestra, sin red.
  * @param {DesktopLink | null} link @param {string} sub @param {string} [name]
  */
@@ -338,6 +353,7 @@ function desktopScreen (link, sub, name = '') {
       </div>
       <nav class="taskbar" data-testid="taskbar" aria-label="${t('taskbar')}"></nav>
     </div>
+    <div class="keybar" data-testid="keybar" role="toolbar" aria-label="${t('keybar')}" hidden>${KEYBAR.map((k) => `<button class="kb${MODS.includes(k) ? ' mod' : ''}" data-k="${esc(k)}" data-testid="key-${esc(k)}">${esc(KEY_LABELS[k] || k)}</button>`).join('')}</div>
     <textarea class="keys" data-testid="keys" autocapitalize="off" autocomplete="off" spellcheck="false" aria-label="${t('keyboard')}"></textarea>
   </section>`)
   const svg = /** @type {SVGSVGElement} */ ($(node, 'svg'))
@@ -883,16 +899,55 @@ function desktopScreen (link, sub, name = '') {
     const p = view.toScreen(e.clientX, e.clientY)
     if (p) send({ type: 'wheel', ...p, dy: Math.sign(e.deltaY) * Math.max(1, Math.round(Math.abs(e.deltaY) / 60)) })
   }, { passive: false })
+  // Los modificadores de la barra: encendidos hasta que la siguiente tecla los usa.
+  const keybar = /** @type {HTMLElement} */ ($(node, '.keybar'))
+  /** @type {Set<string>} */
+  const lit = new Set()
+  const showMods = () => { for (const b of keybar.querySelectorAll('.mod')) b.classList.toggle('on', lit.has(/** @type {HTMLElement} */ (b).dataset.k || '')) }
+  /** Manda una tecla con los modificadores encendidos (y los físicos) y los apaga. @param {number} keysym @param {string[]} [also] */
+  const sendKey = (keysym, also = []) => {
+    const mods = [...new Set([...lit, ...also])]
+    send(mods.length ? { type: 'key', keysym, mods } : { type: 'key', keysym })
+    if (lit.size) { lit.clear(); showMods() }
+  }
   // Teclado: lo que es texto se escribe tal cual (también el del teclado del teléfono, que no
-  // manda teclas sino texto); lo demás va por su keysym.
+  // manda teclas sino texto); lo demás va por su keysym. Con un modificador (de la barra o del
+  // teclado físico) un carácter va como tecla: Ctrl+C no es escribir una «c».
   keys.addEventListener('keydown', (e) => {
+    if (e.isComposing) return
+    const phys = [e.ctrlKey && 'ctrl', e.altKey && 'alt', e.metaKey && 'super', e.shiftKey && 'shift'].filter(Boolean)
     const sym = KEYSYMS[e.key]
-    if (sym && !e.isComposing) { e.preventDefault(); send({ type: 'key', keysym: sym }) }
+    if (sym) { e.preventDefault(); sendKey(sym, /** @type {string[]} */ (phys)); return }
+    if (e.key.length === 1 && (e.ctrlKey || e.altKey || e.metaKey)) { e.preventDefault(); sendKey(keysymOf(e.key.toLowerCase()), /** @type {string[]} */ (phys)) }
   })
   keys.addEventListener('input', () => {
-    if (keys.value) { send({ type: 'text', text: keys.value }); keys.value = '' }
+    const v = keys.value
+    keys.value = ''
+    if (!v) return
+    if (lit.size && [...v].length === 1) sendKey(keysymOf(lit.has('ctrl') || lit.has('alt') ? v.toLowerCase() : v))
+    else send({ type: 'text', text: v })
   })
-  $(node, '[data-testid=keyboard]').addEventListener('click', () => keys.focus())
+  // Tocar la barra no le quita el foco al campo: si no, el teclado del teléfono se cerraría.
+  keybar.addEventListener('pointerdown', (e) => e.preventDefault())
+  keybar.addEventListener('click', (e) => {
+    const b = /** @type {HTMLElement | null} */ (/** @type {HTMLElement} */ (e.target).closest('[data-k]'))
+    const k = b?.dataset.k
+    if (!k) return
+    if (MODS.includes(k)) { if (lit.has(k)) lit.delete(k); else lit.add(k); showMods(); return }
+    const named = KEYBAR_SYM[k]
+    if (named) { sendKey(KEYSYMS[named]); return }
+    if (lit.size) sendKey(keysymOf(k))
+    else send({ type: 'text', text: k })
+  })
+  // El botón «Teclado» abre el teclado con su barra y lo vuelve a cerrar.
+  const kbBtn = $(node, '[data-testid=keyboard]')
+  kbBtn.addEventListener('pointerdown', (e) => e.preventDefault())
+  kbBtn.addEventListener('click', () => {
+    const open = keybar.hidden
+    keybar.hidden = !open
+    kbBtn.classList.toggle('primary', open)
+    if (open) keys.focus(); else { keys.blur(); lit.clear(); showMods() }
+  })
 
   // ---------- conexión ----------
   if (demo) {

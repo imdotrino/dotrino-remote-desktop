@@ -52,12 +52,13 @@ test('clic, doble clic, rueda, texto y tecla llegan al lector', async () => {
   await f.say({ type: 'wheel', x: 1, y: 1, dy: -2 })
   await f.say({ type: 'text', text: 'hola' })
   await f.say({ type: 'key', keysym: 0xff0d })
+  await f.say({ type: 'key', keysym: 0x63, mods: ['ctrl'] })
   await f.say({ type: 'action', id: 7 })
   assert.deepEqual(f.calls, [
     ['mouse', 5, 6, 'abs'], ['mouse', 5, 6, 'b3c'],
     ['mouse', 5, 6, 'abs'], ['mouse', 5, 6, 'b1d'],
     ['mouse', 1, 1, 'abs'], ['mouse', 1, 1, 'b4c'], ['mouse', 1, 1, 'b4c'],
-    ['key', { text: 'hola' }], ['key', { keysym: 0xff0d }], ['action', 7, 0]
+    ['key', { text: 'hola' }], ['key', { keysym: 0xff0d, mods: [] }], ['key', { keysym: 0x63, mods: ['ctrl'] }], ['action', 7, 0]
   ])
 })
 
@@ -67,8 +68,9 @@ test('lo que llega mal se dice con su code, y nada llega al lector', async () =>
   await f.say({ type: 'click', x: 'a', y: 1 })
   await f.say({ type: 'click', x: 1, y: 1, button: 9 })
   await f.say({ type: 'text', text: 'x'.repeat(10_001) })
+  await f.say({ type: 'key', keysym: 0x63, mods: ['hyper'] })
   await f.say({ type: 'nope' })
-  assert.deepEqual(f.sent.slice(1).map((p) => p.code), ['bad-input', 'bad-input', 'too-long', 'unknown-type'])
+  assert.deepEqual(f.sent.slice(1).map((p) => p.code), ['bad-input', 'bad-input', 'too-long', 'bad-input', 'unknown-type'])
   assert.equal(f.calls.length, 0)
 })
 
