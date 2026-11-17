@@ -82,3 +82,5 @@ a { color: var(--dt-accent); text-underline-offset: 3px; }
 .vspin text { fill: var(--dt-text-dim); font-size: 28px; font-family: var(--dt-font); }
 .vspin-turn { animation: vspin 0.9s linear infinite; }
 @keyframes vspin { to { transform: rotate(360deg); } }
+/* El punto: la ventana con el foco en la máquina (lo que se mira va resaltado aparte). */
+.task.focus::before { content: ''; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--dt-ok); margin-right: 6px; vertical-align: middle; }

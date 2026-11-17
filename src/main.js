@@ -426,18 +426,29 @@ function desktopScreen (link, sub, name = '') {
     // Elegir una ventana es querer trabajar en ella: se trae al frente, con el foco, en la máquina.
     if (typeof watch === 'number') send({ type: 'raise', id: watch })
   }
+  // ORDEN FIJO: el agente da las ventanas en orden de apilado (la activa, la última), así que
+  // traer una al frente la movía de sitio en la barra. Aquí cada una conserva el suyo desde que
+  // aparece; las nuevas van al final y las que se cierran se quitan.
+  /** @type {number[]} */
+  let taskOrder = []
   function showWins () {
     if (!scene) return
     const activeId = scene.wins.find((w) => w.active)?.id
+    const alive = scene.wins.filter((w) => w.name && rectOf(w.id))
+    const ids = new Set(alive.map((w) => w.id))
+    taskOrder = taskOrder.filter((id) => ids.has(id))
+    for (const w of alive) if (!taskOrder.includes(w.id)) taskOrder.push(w.id)
+    const byId = new Map(alive.map((w) => [w.id, w]))
+    // Resaltado = lo que se MIRA en la tableta. El punto = la ventana con el foco en la máquina.
     /** @param {string} label @param {'active' | 'all' | number} what @param {string} [cls] */
     const btn = (label, what, cls = '') => {
-      const on = watch === what || (watch === 'active' && what === activeId)
-      const b = el(`<button class="task${on ? ' on' : ''}${cls}" data-testid="task" title="${esc(label)}">${esc(label)}</button>`)
+      const focus = typeof what === 'number' && what === activeId
+      const b = el(`<button class="task${watch === what ? ' on' : ''}${focus ? ' focus' : ''}${cls}" data-testid="task" title="${esc(label)}">${esc(label)}</button>`)
       b.addEventListener('click', () => pick(what))
       return b
     }
     const items = [btn(t('active_short'), 'active', ' fixed'), btn(t('all_short'), 'all', ' fixed')]
-    for (const w of scene.wins) if (w.name && rectOf(w.id)) items.push(btn(w.name, w.id))
+    for (const id of taskOrder) { const w = byId.get(id); if (w) items.push(btn(w.name, id)) }
     taskbar.replaceChildren(...items)
   }
 
