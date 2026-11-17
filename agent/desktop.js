@@ -16,6 +16,7 @@
 import { makeReader, openA11yBus, setA11y, restoreA11y } from './atspi.js'
 import { diff, screenOf } from './scene.js'
 import { activeWindow, sameTitle } from './raise.js'
+import { makeClientWindows } from './wm.js'
 
 export const SETTLE_MS = 120
 export const WINDOWS_MS = 1000
@@ -59,6 +60,8 @@ export function makeDesktop (opts = {}) {
   let running = Promise.resolve()
   /** @type {Promise<void> | null} */
   let starting = null
+  /** Las ventanas que solo conoce el gestor de ventanas (wm.js). */
+  const clients = makeClientWindows()
 
   async function start () {
     conn = await openA11yBus()
@@ -114,26 +117,43 @@ export function makeDesktop (opts = {}) {
     // Cuál está activa lo dice el gestor de ventanas si se le puede preguntar: la accesibilidad
     // la informa mal (una app de Electron se queda «activa» para siempre).
     const real = await activeWindow()
+    /** @type {Map<typeof wins[number], number>} el proceso de cada ventana */
+    const pidOfWin = new Map()
+    for (const w of wins) {
+      let pid = pids.get(w.ref[0])
+      if (pid == null) { try { pid = await reader.pidOf(w.id) } catch (_) { pid = -1 } pids.set(w.ref[0], pid) }
+      pidOfWin.set(w, pid)
+    }
     /** @type {Node | null} la ventana activa cuando no publica accesibilidad */
     let synth = null
     if (real) {
-      for (const w of wins) {
-        let pid = pids.get(w.ref[0])
-        if (pid == null) { try { pid = await reader.pidOf(w.id) } catch (_) { pid = -1 } pids.set(w.ref[0], pid) }
-        w.active = pid === real.pid && sameTitle(real.title, w.name)
-      }
+      for (const w of wins) w.active = pidOfWin.get(w) === real.pid && sameTitle(real.title, w.name)
       // Por si dos casan por el principio del título: la de título más largo que case, una sola.
       const act = wins.filter((w) => w.active)
       if (act.length > 1) { const best = act.reduce((a, b) => (b.name.length > a.name.length ? b : a)); for (const w of act) w.active = w === best }
-      wins.sort((a, b) => Number(a.active) - Number(b.active))
-      // UNA APP SIN ACCESIBILIDAD (la terminal de Dotrino, un juego) no sale en la lista: si es
-      // la activa, se enseña igual, como un hueco entero con su sitio y su título. Lleva vídeo.
-      if (!wins.some((w) => w.active) && real.w > 0 && real.h > 0) {
-        const id = reader.idOf([':x11', `/window/${real.window}`])
-        synthPids.set(id, real.pid)
-        synth = { id, p: 0, r: 'frame', n: real.title, x: real.x, y: real.y, w: real.w, h: real.h, s: 'a', hole: 1 }
-      }
     }
+    wins.sort((a, b) => Number(a.active) - Number(b.active))
+    // LAS APPS SIN ACCESIBILIDAD (la Terminal de Dotrino, un juego) no salen en la lista de AT-SPI:
+    // se toman del gestor de ventanas, cada una como un hueco entero con su sitio y su título, que
+    // lleva vídeo. Las de debajo van primero; la activa, encima de todo.
+    const covered = new Set([...pidOfWin.values()].filter((p) => p > 0))
+    const extra = (await clients.list(covered)) || []
+    synthPids.clear()
+    /** @type {Node[]} */
+    const below = []
+    /** @param {{ window: string, pid: number, title: string, x: number, y: number, w: number, h: number }} c @param {boolean} active */
+    const hole = (c, active) => {
+      const id = /** @type {ReturnType<typeof makeReader>} */ (reader).idOf([':x11', `/window/${c.window}`])
+      synthPids.set(id, c.pid)
+      return /** @type {Node} */ ({ id, p: 0, r: 'frame', n: c.title, x: c.x, y: c.y, w: c.w, h: c.h, s: active ? 'a' : '', hole: 1 })
+    }
+    const anyActive = wins.some((w) => w.active)
+    for (const c of extra) {
+      const active = !anyActive && !!real && real.window === c.window
+      if (active) synth = hole(c, true); else below.push(hole(c, false))
+    }
+    // La activa sin accesibilidad de un proceso que sí la publica en otras ventanas: igual, un hueco.
+    if (real && !anyActive && !synth && real.w > 0 && real.h > 0) synth = hole({ ...real, title: real.title }, true)
     const full = fullDue
     fullDue = false
     const dirty = new Set(dirtyApps)
@@ -154,12 +174,14 @@ export function makeDesktop (opts = {}) {
     /** @type {Node[]} */
     const nodes = []
     for (const w of wins) { const p = perWin.get(w.id); if (p) nodes.push(...p.nodes) }
+    nodes.unshift(...below)
     if (synth) nodes.push(synth)
     /** @type {Scene} */
     const next = {
       seq: scene.seq + 1,
       screen: screenOf(wins),
-      wins: [...wins.map((w) => ({ id: w.id, app: w.app, name: w.name, active: w.active })),
+      wins: [...below.map((n) => ({ id: n.id, app: n.n || '', name: n.n || '', active: false })),
+        ...wins.map((w) => ({ id: w.id, app: w.app, name: w.name, active: w.active })),
         ...(synth ? [{ id: synth.id, app: synth.n || '', name: synth.n || '', active: true }] : [])],
       nodes
     }

@@ -1,6 +1,6 @@
 {
   "name": "@dotrino/remote-desktop-agent",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "description": "Dotrino Remote Desktop: usa el escritorio de esta máquina desde los otros aparatos de tu cuenta. Lo dibuja a partir de su árbol de accesibilidad (ligero y nítido), cifrado punto a punto.",
   "type": "module",
   "bin": {
@@ -13,6 +13,7 @@
   "files": [
     "index.js",
     "raise.js",
+    "wm.js",
     "icon.js",
     "video.js",
     "atspi.js",
