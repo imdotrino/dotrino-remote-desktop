@@ -128,6 +128,11 @@ export function makeVideo ({ log = () => {}, spawn = nodeSpawn, session = proces
     current = key
     const p = spawn('ffmpeg', ffmpegArgs(r, display, profile), { stdio: ['ignore', 'pipe', 'pipe'] })
     proc = p
+    // Si el agente se va (Ctrl+C, una actualización), la captura se va con él: no se deja un
+    // ffmpeg grabando la pantalla sin nadie que lo lea.
+    const reap = () => { try { p.kill('SIGKILL') } catch (_) {} }
+    process.once('exit', reap)
+    p.once('exit', () => process.removeListener('exit', reap))
     let pending = new Uint8Array(0)
     let errText = ''
     /** @type {ReturnType<typeof setTimeout> | null} */
