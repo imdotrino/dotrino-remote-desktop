@@ -56,6 +56,7 @@ import { makeGate, makeLock } from '@dotrino/remote-agent/access'
 import { dataDir, loadLink, LABEL } from './link.js'
 import { makeDesktop } from './desktop.js'
 import { raiseWindow } from './raise.js'
+import { makeIcons } from './icon.js'
 import { makeVideo, evenRect } from './video.js'
 import { listenLocal } from '@dotrino/remote-agent/local'
 import { makeFar } from './far.js'
@@ -89,6 +90,9 @@ const MAX_TYPED = 10_000
 const num = (v) => typeof v === 'number' && Number.isFinite(v)
 /** @param {unknown} v @returns {v is number} */
 const int = (v) => Number.isInteger(v)
+
+// LOS ICONOS de las ventanas, para la barra de tareas: uno para todo el agente, con su caché.
+const icons = makeIcons()
 
 /**
  * Atiende una sesión de otro aparato. Exportada para las pruebas.
@@ -236,6 +240,22 @@ export function serveSession (session, desktop, { log = () => {}, route = async 
           if (!win) return fail('window-not-found', `no window ${id} in the scene`)
           const node = desktop.scene.nodes.find((n) => n.id === id)
           await raiseWindow({ pid: await desktop.pidOf(id), title: win.name, rect: node ? { x: node.x, y: node.y, w: node.w, h: node.h } : null })
+          return
+        }
+        case 'icon': {
+          // El icono de la app de una ventana, para la barra de tareas. Que no tenga es normal
+          // (`png: null`); lo que no se pudo mirar va con su `code`, sin cortar nada más.
+          if (!int(id)) return fail('bad-input', 'icon needs a window id')
+          const win = desktop.scene.wins.find((w) => w.id === id)
+          if (!win) return fail('window-not-found', `no window ${id} in the scene`)
+          const node = desktop.scene.nodes.find((n) => n.id === id)
+          try {
+            const png = await icons.iconOf({ pid: await desktop.pidOf(id), title: win.name, rect: node ? { x: node.x, y: node.y, w: node.w, h: node.h } : null })
+            session.send({ type: 'icon', id, png })
+          } catch (e) {
+            const err = /** @type {{ code?: string, message?: string }} */ (e)
+            session.send({ type: 'icon', id, png: null, code: err.code || 'icon-failed', message: err.message || String(e) })
+          }
           return
         }
         case 'key':

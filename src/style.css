@@ -71,10 +71,20 @@ a { color: var(--dt-accent); text-underline-offset: 3px; }
 
 .dbar-fill { flex: 1; }
 /* La barra de tareas: una fila fina abajo que se desliza de lado, sin barra de desplazamiento. */
-.taskbar { display: flex; gap: 6px; overflow-x: auto; padding: 8px 0 calc(4px + env(safe-area-inset-bottom)); scrollbar-width: none; }
+.tbwrap { position: relative; display: flex; align-items: center; gap: 6px; padding: 8px 0 calc(4px + env(safe-area-inset-bottom)); }
+.taskbar { flex: 1; min-width: 0; display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+/* El botón de opciones de la barra: pequeño, a la izquierda, y su menú se abre hacia arriba. */
+.tbopts { flex-shrink: 0; width: 30px; height: 30px; padding: 0; font: inherit; font-size: 18px; line-height: 1; border-radius: 50%; border: 1px solid var(--dt-line); background: var(--dt-surface); color: var(--dt-text-dim); cursor: pointer; }
+.tbmenu { position: absolute; left: 0; bottom: 100%; z-index: 5; display: flex; flex-direction: column; min-width: 160px; padding: 4px; border-radius: 12px; border: 1px solid var(--dt-line); background: var(--dt-surface); box-shadow: 0 6px 20px #0003; }
+.tbmenu[hidden] { display: none; }
+.tbmenu button { font: inherit; font-size: 14px; text-align: left; padding: 8px 12px; border: none; border-radius: 8px; background: none; color: var(--dt-text); cursor: pointer; }
+.tbmenu button[aria-checked=true] { background: var(--dt-accent); color: var(--dt-accent-ink); }
 .taskbar::-webkit-scrollbar { display: none; }
-.task { flex-shrink: 0; font: inherit; font-size: 13px; max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 6px 12px; border-radius: var(--dt-radius-pill); border: 1px solid var(--dt-line); background: var(--dt-surface); color: var(--dt-text); cursor: pointer; }
+.task { flex-shrink: 0; display: inline-flex; align-items: center; gap: 6px; font: inherit; font-size: 13px; max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 6px 12px; border-radius: var(--dt-radius-pill); border: 1px solid var(--dt-line); background: var(--dt-surface); color: var(--dt-text); cursor: pointer; }
 .task.fixed { font-weight: 600; }
+.tlabel { overflow: hidden; text-overflow: ellipsis; }
+.ticon { flex-shrink: 0; width: 20px; height: 20px; }
+.tletter { display: inline-grid; place-items: center; border-radius: 6px; font-size: 12px; font-weight: 700; background: var(--dt-line); color: var(--dt-text); }
 .task.on { background: var(--dt-accent); color: var(--dt-accent-ink); border-color: var(--dt-accent); }
 /* Mientras llega la imagen de un hueco. */
 .vspin { pointer-events: none; }
@@ -83,7 +93,7 @@ a { color: var(--dt-accent); text-underline-offset: 3px; }
 .vspin-turn { animation: vspin 0.9s linear infinite; }
 @keyframes vspin { to { transform: rotate(360deg); } }
 /* El punto: la ventana con el foco en la máquina (lo que se mira va resaltado aparte). */
-.task.focus::before { content: ''; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--dt-ok); margin-right: 6px; vertical-align: middle; }
+.task.focus::before { content: ''; flex-shrink: 0; width: 7px; height: 7px; border-radius: 50%; background: var(--dt-ok); }
 
 .unlock { display: flex; gap: 8px; margin: 0 0 8px; }
 .unlock input { flex: 1; min-width: 0; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--dt-border, #8884); background: var(--dt-surface, transparent); color: inherit; font: inherit; }

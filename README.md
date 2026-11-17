@@ -57,8 +57,8 @@ hueco con su nombre.
 
 | Sentido | Payload |
 |---|---|
-| cliente → máquina | `scene` · `leave` · `raise {id}` (traer la ventana al frente; X11 con `xdotool`) · `click {x,y,button?,double?}` · `press`/`release {x,y,button?}` · `move {x,y}` · `wheel {x,y,dy}` · `action {id,index?}` · `focus {id}` · `text {text}` · `key {keysym}` · `video {id\|null}` |
-| máquina → cliente | `scene {seq,screen,wins,nodes}` · `patch {seq,base,put,del,order?,screen?,wins?}` · `vframe {id,seq,key,rect,q,data}` · `fail {code,message}` |
+| cliente → máquina | `scene` · `leave` · `raise {id}` (traer la ventana al frente; X11 con `xdotool`) · `click {x,y,button?,double?}` · `press`/`release {x,y,button?}` · `move {x,y}` · `wheel {x,y,dy}` · `action {id,index?}` · `focus {id}` · `text {text}` · `key {keysym}` · `video {id\|null}` · `icon {id}` (el icono de la app de esa ventana, ≥ 0.8.0; X11 con `xprop`) |
+| máquina → cliente | `scene {seq,screen,wins,nodes}` · `patch {seq,base,put,del,order?,screen?,wins?}` · `vframe {id,seq,key,rect,q,data}` · `icon {id,png\|null,code?}` (PNG en base64 de hasta 48 px; `null` = sin icono) · `fail {code,message}` |
 
 **Ventanas de esta máquina (socket local, agente ≥ 0.7.0).** La app de escritorio (`desktop/`) le
 habla al agente de su máquina por `remote-desktop.sock` en la carpeta del enlace (carpeta 0700,

@@ -66,6 +66,10 @@ const M = {
     screen_n: (n) => `Pantalla ${n}`,
     all_short: 'Todo',
     taskbar: 'Ventanas abiertas',
+    taskbar_opts: 'Cómo se ve la barra',
+    tb_both: 'Icono y nombre',
+    tb_icon: 'Solo icono',
+    tb_label: 'Solo nombre',
     hscroll: 'Desplazar a los lados',
     touch_mode: 'Cómo responde el toque',
     mode_pan: 'Mover',
@@ -87,7 +91,7 @@ const M = {
     err_no_raise: 'Esa máquina no deja traer ventanas al frente desde aquí: la ves, pero puede estar tapada por otra.',
     err_window_gone: 'Esa ventana ya no está abierta.',
     err_no_video: 'Esa máquina no puede enviar la imagen de esta ventana (le falta ffmpeg, o usa Wayland).',
-    err_old_agent: 'Esa máquina tiene una versión anterior del escritorio remoto: actualízala para ver la imagen de las ventanas y traerlas al frente.',
+    err_old_agent: 'Esa máquina tiene una versión anterior del escritorio remoto: actualízala para ver la imagen de las ventanas, sus iconos y traerlas al frente.',
     video_wait: 'La imagen de esta ventana solo viaja por conexión directa entre tus aparatos. Esperando a que se abra…',
     video_loading: 'Cargando imagen…',
     video_low: 'Imagen reducida: tus aparatos no están conectados directamente, y así gasta menos.',
@@ -123,6 +127,10 @@ const M = {
     screen_n: (n) => `Screen ${n}`,
     all_short: 'All',
     taskbar: 'Open windows',
+    taskbar_opts: 'How the bar looks',
+    tb_both: 'Icon and name',
+    tb_icon: 'Icon only',
+    tb_label: 'Name only',
     hscroll: 'Scroll sideways',
     touch_mode: 'How touch behaves',
     mode_pan: 'Pan',
@@ -144,7 +152,7 @@ const M = {
     err_no_raise: 'That machine does not let windows be brought to the front from here: you see it, but another may cover it.',
     err_window_gone: 'That window is no longer open.',
     err_no_video: 'That machine cannot send the picture of this window (it lacks ffmpeg, or uses Wayland).',
-    err_old_agent: 'That machine runs an older version of the remote desktop: update it to see the picture of windows and bring them to the front.',
+    err_old_agent: 'That machine runs an older version of the remote desktop: update it to see the picture of windows, their icons, and bring them to the front.',
     video_wait: 'The picture of this window only travels over a direct connection between your devices. Waiting for it to open…',
     video_loading: 'Loading picture…',
     video_low: 'Reduced picture: your devices are not connected directly, so it uses less data.',
@@ -323,7 +331,13 @@ function desktopScreen (link, sub, name = '') {
     <form class="unlock" data-testid="unlock" hidden><input type="password" autocomplete="off" data-testid="unlock-code" aria-label="${t('code_label')}" placeholder="${t('code_label')}"><button class="btn" data-testid="unlock-send">${t('code_send')}</button></form>
     <div class="stage"><svg class="screen" data-testid="screen" preserveAspectRatio="xMidYMin meet"></svg></div>
     <input class="hscroll" type="range" min="0" max="1000" value="0" data-testid="hscroll" aria-label="${t('hscroll')}" hidden>
-    <nav class="taskbar" data-testid="taskbar" aria-label="${t('taskbar')}"></nav>
+    <div class="tbwrap">
+      <button class="tbopts" data-testid="taskbar-opts" aria-haspopup="true" aria-expanded="false" aria-label="${t('taskbar_opts')}" title="${t('taskbar_opts')}">⋯</button>
+      <div class="tbmenu" role="menu" data-testid="taskbar-menu" hidden>
+        ${['both', 'icon', 'label'].map((m) => `<button role="menuitemradio" data-tb="${m}" data-testid="tb-${m}">${t('tb_' + m)}</button>`).join('')}
+      </div>
+      <nav class="taskbar" data-testid="taskbar" aria-label="${t('taskbar')}"></nav>
+    </div>
     <textarea class="keys" data-testid="keys" autocapitalize="off" autocomplete="off" spellcheck="false" aria-label="${t('keyboard')}"></textarea>
   </section>`)
   const svg = /** @type {SVGSVGElement} */ ($(node, 'svg'))
@@ -463,6 +477,40 @@ function desktopScreen (link, sub, name = '') {
    * desliza de lado; el botón de lo que se mira, resaltado. Sustituye al desplegable de arriba.
    */
   const taskbar = $(node, '.taskbar')
+  // CÓMO SE VE: icono y nombre, solo icono o solo nombre (dueño, 2026-11-17). Es preferencia de
+  // este aparato y se recuerda en él.
+  const TASKBAR_KEY = 'dotrino-remote-desktop:taskbar'
+  /** @type {'both' | 'icon' | 'label'} */
+  let tbMode = 'both'
+  try { const v = localStorage.getItem(TASKBAR_KEY); if (v === 'icon' || v === 'label') tbMode = v } catch {}
+  const tbOpts = /** @type {HTMLButtonElement} */ ($(node, '.tbopts'))
+  const tbMenu = /** @type {HTMLElement} */ ($(node, '.tbmenu'))
+  const showMenu = (/** @type {boolean} */ open) => {
+    tbMenu.hidden = !open
+    tbOpts.setAttribute('aria-expanded', String(open))
+    for (const b of tbMenu.querySelectorAll('[data-tb]')) b.setAttribute('aria-checked', String(/** @type {HTMLElement} */ (b).dataset.tb === tbMode))
+  }
+  tbOpts.addEventListener('click', (e) => { e.stopPropagation(); showMenu(tbMenu.hidden) })
+  tbMenu.addEventListener('click', (e) => {
+    const b = /** @type {HTMLElement | null} */ (/** @type {HTMLElement} */ (e.target).closest('[data-tb]'))
+    if (!b) return
+    tbMode = /** @type {'both' | 'icon' | 'label'} */ (b.dataset.tb)
+    try { localStorage.setItem(TASKBAR_KEY, tbMode) } catch {}
+    showMenu(false)
+    showWins()
+  })
+  node.addEventListener('click', (e) => { if (!tbMenu.hidden && !tbMenu.contains(/** @type {Node} */ (e.target))) showMenu(false) })
+
+  // LOS ICONOS de las apps (agent/icon.js): se piden una vez por ventana y se guardan aquí.
+  // `null` = esa ventana no tiene icono (o no se pudo mirar): sale la inicial de su nombre.
+  /** @type {Map<number, string | null>} */
+  const icons = new Map()
+  /** @param {number} id @param {string} name */
+  const iconHtml = (id, name) => {
+    const src = icons.get(id)
+    if (src) return `<img class="ticon" src="${src}" alt="">`
+    return `<span class="ticon tletter" aria-hidden="true">${esc((name.trim()[0] || '?').toUpperCase())}</span>`
+  }
   /** @param {'active' | 'all' | number} what */
   const pick = (what) => {
     watch = what
@@ -485,10 +533,12 @@ function desktopScreen (link, sub, name = '') {
     for (const w of alive) if (!taskOrder.includes(w.id)) taskOrder.push(w.id)
     const byId = new Map(alive.map((w) => [w.id, w]))
     // Resaltado = lo que se MIRA en la tableta. El punto = la ventana con el foco en la máquina.
-    /** @param {string} label @param {'active' | 'all' | number} what @param {string} [cls] */
-    const btn = (label, what, cls = '') => {
+    /** @param {string} label @param {'active' | 'all' | number} what @param {string} [cls] @param {boolean} [app] una ventana (lleva icono) */
+    const btn = (label, what, cls = '', app = false) => {
       const focus = typeof what === 'number' && what === activeId
-      const b = el(`<button class="task${watch === what ? ' on' : ''}${focus ? ' focus' : ''}${cls}" data-testid="task" title="${esc(label)}">${esc(label)}</button>`)
+      const ic = app && tbMode !== 'label' && typeof what === 'number' ? iconHtml(what, label) : ''
+      const tx = !app || tbMode !== 'icon' ? `<span class="tlabel">${esc(label)}</span>` : ''
+      const b = el(`<button class="task${watch === what ? ' on' : ''}${focus ? ' focus' : ''}${cls}" data-testid="task" title="${esc(label)}" aria-label="${esc(label)}">${ic}${tx}</button>`)
       b.addEventListener('click', () => pick(what))
       return b
     }
@@ -496,7 +546,12 @@ function desktopScreen (link, sub, name = '') {
     const mons = monitors()
     mons.forEach((m, i) => items.push(btn(mons.length > 1 ? t('screen_n', i + 1) : t('screen'), m.id, ' fixed')))
     const monIds = new Set(mons.map((m) => m.id))
-    for (const id of taskOrder) { const w = byId.get(id); if (w && !monIds.has(id)) items.push(btn(w.name, id)) }
+    for (const id of taskOrder) {
+      const w = byId.get(id)
+      if (!w || monIds.has(id)) continue
+      items.push(btn(w.name, id, '', true))
+      if (!demo && tbMode !== 'label' && !icons.has(id)) { icons.set(id, null); send({ type: 'icon', id }) }
+    }
     taskbar.replaceChildren(...items)
   }
 
@@ -850,7 +905,14 @@ function desktopScreen (link, sub, name = '') {
       const client = rc = new RemoteAgentClient(link, { agentPubkey: sub })
       client.on('message', (/** @type {AgentMessage | null} */ p) => {
         if (client !== rc || !p || typeof p !== 'object') return
-        if (p.type === 'scene') { gotScene = true; if (sceneWatch) clearTimeout(sceneWatch); status.textContent = ''; paint(p); return }
+        if (p.type === 'icon') {
+          // Sin icono es normal; si no se pudo mirar, se apunta en la consola y queda la inicial.
+          if (p.code) console.warn(`icon of window ${p.id}: ${p.code}: ${p.message}`)
+          icons.set(p.id, p.png ? `data:image/png;base64,${p.png}` : null)
+          showWins()
+          return
+        }
+        if (p.type === 'scene') { icons.clear(); gotScene = true; if (sceneWatch) clearTimeout(sceneWatch); status.textContent = ''; paint(p); return }
         if (p.type === 'patch') {
           if (!scene) return
           try {

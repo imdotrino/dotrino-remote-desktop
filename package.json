@@ -1,7 +1,7 @@
 {
   "name": "dotrino-remote-desktop",
   "private": true,
-  "version": "0.12.0",
+  "version": "0.13.0",
   "type": "module",
   "description": "Escritorio remoto del ecosistema Dotrino: usa el escritorio de tu computadora desde el navegador de otro aparato de tu cuenta. Se dibuja a partir de su árbol de accesibilidad: ligero y con el texto nítido.",
   "scripts": {

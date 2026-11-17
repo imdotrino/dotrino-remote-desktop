@@ -26,6 +26,7 @@ Las ventanas de esta máquina (la app de escritorio) le hablan por un socket loc
 tus otras máquinas con su propio enlace (≥ 0.7.0).
 
 Corre dentro de la sesión gráfica del usuario: necesita su bus de sesión y el de accesibilidad
-(`at-spi2-core`). Protocolo y diseño: [el repo](https://github.com/imdotrino/dotrino-remote-desktop).
+(`at-spi2-core`). En X11 usa `xdotool` (traer ventanas al frente), `xprop` (los iconos de la
+barra de tareas) y `ffmpeg` (el vídeo de lo que no publica accesibilidad). Protocolo y diseño: [el repo](https://github.com/imdotrino/dotrino-remote-desktop).
 
 MIT.

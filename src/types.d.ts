@@ -17,3 +17,4 @@ export type AgentMessage =
   | { type: 'vwait', id: number, route: string }
   | { type: 'fail', code: string, message: string, retryMs?: number }
   | { type: 'unlocked' }
+  | { type: 'icon', id: number, png: string | null, code?: string, message?: string }

@@ -74,13 +74,27 @@ export function pickWindow (cands, title, rect = null) {
  */
 export async function raiseWindow ({ pid, title, rect = null, session = process.env.XDG_SESSION_TYPE || '', exec = run }) {
   if (session === 'wayland') throw fail('no-raise', 'Wayland does not let a program bring windows to the front')
+  const cands = await windowsOf(pid, exec)
+  const win = pickWindow(cands, title, rect)
+  if (!win) throw fail('window-not-found', `no window like "${title.slice(0, 60)}" in process ${pid}`)
+  await exec('xdotool', ['windowactivate', win])
+  return { window: win }
+}
+
+/**
+ * Las ventanas X11 de un proceso, con su título, sitio y tamaño (para `pickWindow`).
+ * @param {number} pid @param {typeof run} [exec]
+ * @param {string} [missing]  el `code` si falta xdotool (lo que no se puede hacer sin él)
+ * @returns {Promise<Array<{ id: string, name: string, x?: number, y?: number, w?: number, h?: number }>>}
+ */
+export async function windowsOf (pid, exec = run, missing = 'no-raise') {
   /** @type {string[]} */
   let ids
   try {
     ids = (await exec('xdotool', ['search', '--pid', String(pid)])).split('\n').map((s) => s.trim()).filter(Boolean)
   } catch (e) {
     const err = /** @type {NodeJS.ErrnoException & { code?: string | number }} */ (e)
-    if (err.code === 'ENOENT') throw fail('no-raise', 'xdotool is not installed on this machine')
+    if (err.code === 'ENOENT') throw fail(missing, 'xdotool is not installed on this machine')
     // `search` sale con 1 cuando no encuentra nada: no hay ventana de ese proceso.
     throw fail('window-not-found', `no window of process ${pid}`)
   }
@@ -96,10 +110,7 @@ export async function raiseWindow ({ pid, title, rect = null, session = process.
       cands.push({ id, name: name.trim(), x: kv.X, y: kv.Y, w: kv.WIDTH, h: kv.HEIGHT })
     } catch (_) { /* una ventana que se cerró mientras se miraba */ }
   }
-  const win = pickWindow(cands, title, rect)
-  if (!win) throw fail('window-not-found', `no window like "${title.slice(0, 60)}" in process ${pid}`)
-  await exec('xdotool', ['windowactivate', win])
-  return { window: win }
+  return cands
 }
 
 /**
