@@ -397,7 +397,8 @@ function desktopScreen (link, sub, name = '') {
   /** @param {number | null} id */
   const showSpinner = (id) => {
     const r = id != null ? rectOf(id) : null
-    if (!r || demo) { spinner.style.display = 'none'; return }
+    // Con una imagen guardada de esa ventana, se enseña esa (sale al momento) y no el círculo.
+    if (!r || demo || (id != null && videoLayer.has(id))) { spinner.style.display = 'none'; return }
     // Del tamaño del hueco, para que se vea con cualquier zoom.
     const k = Math.max(0.3, Math.min(r.w, r.h) / 400)
     spinner.setAttribute('transform', `translate(${r.x + r.w / 2} ${r.y + r.h / 2}) scale(${k})`)

@@ -146,5 +146,8 @@ export function makeVideoLayer (overlay, onError) {
     tiles.clear()
   }
 
-  return { frame, stopLive, sync, clear, get live () { return liveId } }
+  /** ¿Hay ya una imagen guardada de ese hueco? @param {number} id */
+  const has = (id) => tiles.has(id)
+
+  return { frame, stopLive, sync, clear, has, get live () { return liveId } }
 }
