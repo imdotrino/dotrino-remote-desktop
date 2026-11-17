@@ -222,9 +222,17 @@ export function makeReader (bus) {
     async function visit (ref, parent, depth) {
       if (budget <= 0 || depth > MAX_DEPTH) return []
       const d = await describe(ref, false)
-      if (!d || !d.ext) return []
+      if (!d) return []
+      // SIN POSICIÓN NO SE DIBUJA, PERO SE ENTRA: la pestaña de un cuaderno GTK no publica su sitio y
+      // de ella cuelga la lista de archivos de Thunar entera. Cortar aquí la dejaba vacía.
+      if (!d.ext || d.ext[2] <= 0 || d.ext[3] <= 0) {
+        if (!d.count) return []
+        /** @type {Ref[]} */
+        let kids = []
+        try { kids = (await call(ref, I_ACC, 'GetChildren'))[0] } catch (e) { if (!(e instanceof DBusError)) throw e }
+        return (await Promise.all(kids.slice(0, MAX_CHILDREN).map((k) => visit(k, parent, depth + 1)))).flat()
+      }
       const [x, y, w, h] = d.ext
-      if (w <= 0 || h <= 0) return []
       budget--
       const id = idOf(ref)
       /** @type {Node} */
